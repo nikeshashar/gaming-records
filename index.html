@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Night Scoreboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --felt-900: #0b120e;
+    --felt-800: #101a14;
+    --felt-700: #16241c;
+    --felt-600: #1e3126;
+    --line: #2a4434;
+    --line-soft: #22392c;
+    --chalk: #f3efe4;
+    --chalk-dim: #b9c4b6;
+    --chalk-faint: #7d8f7f;
+    --amber: #ffb52e;
+    --amber-deep: #e08f00;
+    --amber-glow: rgba(255, 181, 46, 0.35);
+    --red: #ff5d47;
+    --teal: #4fd1a5;
+    --display: "Bungee", cursive;
+    --mono: "IBM Plex Mono", monospace;
+    --sans: "IBM Plex Sans", sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { color-scheme: dark; }
+
+  body {
+    font-family: var(--sans);
+    background:
+      radial-gradient(1200px 600px at 70% -10%, rgba(255, 181, 46, 0.07), transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, rgba(79, 209, 165, 0.05), transparent 55%),
+      var(--felt-900);
+    color: var(--chalk);
+    min-height: 100vh;
+  }
+
+  /* subtle felt grain */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 1;
+  }
+
+  .app { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    padding-bottom: 22px;
+    border-bottom: 3px double var(--line);
+    margin-bottom: 26px;
+  }
+  .brand h1 {
+    font-family: var(--display);
+    font-size: clamp(1.7rem, 4.5vw, 2.6rem);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: var(--amber);
+    text-shadow: 0 0 22px var(--amber-glow), 0 2px 0 #5d3c00;
+  }
+  .brand .sub {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--chalk-faint);
+    margin-top: 8px;
+  }
+  .header-actions { display: flex; gap: 10px; }
+
+  /* ---------- buttons ---------- */
+  button {
+    font-family: var(--mono); font-weight: 600;
+    cursor: pointer; border: none;
+    transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  button:active { transform: translateY(1px); }
+  .btn {
+    padding: 10px 18px; font-size: 0.85rem;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: 6px;
+    background: var(--felt-600); color: var(--chalk);
+    border: 1px solid var(--line);
+  }
+  .btn:hover { background: var(--felt-700); border-color: var(--chalk-faint); }
+  .btn-amber {
+    background: var(--amber); color: #221500;
+    border: 1px solid var(--amber-deep);
+    box-shadow: 0 0 18px rgba(255, 181, 46, 0.25), inset 0 -2px 0 rgba(0,0,0,0.2);
+  }
+  .btn-amber:hover { background: #ffc45a; }
+  .btn-ghost { background: transparent; border: 1px dashed var(--line); color: var(--chalk-dim); }
+  .btn-ghost:hover { color: var(--chalk); border-color: var(--chalk-faint); background: transparent; }
+  .btn-sm { padding: 6px 12px; font-size: 0.72rem; }
+  .btn-danger:hover { background: #3a1712; color: var(--red); border-color: var(--red); }
+
+  /* ---------- layout ---------- */
+  .layout { display: grid; grid-template-columns: 250px 1fr; gap: 26px; align-items: start; }
+  @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ---------- game rail ---------- */
+  .rail { display: flex; flex-direction: column; gap: 8px; }
+  .rail-label {
+    font-family: var(--mono); font-size: 0.7rem;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--chalk-faint); margin-bottom: 4px;
+  }
+  .game-tab {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    padding: 12px 14px; border-radius: 8px;
+    background: var(--felt-800);
+    border: 1px solid var(--line-soft);
+    color: var(--chalk-dim);
+    font-family: var(--sans); font-weight: 600; font-size: 0.95rem;
+  }
+  .game-tab:hover { border-color: var(--chalk-faint); color: var(--chalk); }
+  .game-tab.active {
+    background: var(--felt-600);
+    border-color: var(--amber);
+    color: var(--chalk);
+    box-shadow: 0 0 14px rgba(255, 181, 46, 0.12), inset 3px 0 0 var(--amber);
+  }
+  .game-tab .emoji { font-size: 1.25rem; }
+  .game-tab .count {
+    margin-left: auto;
+    font-family: var(--mono); font-size: 0.72rem;
+    color: var(--chalk-faint);
+  }
+  .game-tab.active .count { color: var(--amber); }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--felt-800);
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    padding: 22px;
+  }
+  .panel + .panel { margin-top: 22px; }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .panel-title {
+    font-family: var(--display); font-size: 1.15rem;
+    color: var(--chalk); letter-spacing: 0.02em;
+  }
+  .panel-title .em { color: var(--amber); }
+
+  /* ---------- stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .tile {
+    background: var(--felt-700);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative; overflow: hidden;
+  }
+  .tile::after {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--amber), transparent 70%);
+    opacity: 0.6;
+  }
+  .tile .k {
+    font-family: var(--mono); font-size: 0.66rem;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--chalk-faint); margin-bottom: 8px;
+  }
+  .tile .v {
+    font-family: var(--mono); font-weight: 700;
+    font-size: 1.5rem; color: var(--amber);
+    text-shadow: 0 0 14px var(--amber-glow);
+    overflow-wrap: anywhere;
+  }
+  .tile .v.small { font-size: 1.05rem; }
+
+  /* ---------- leaderboard table ---------- */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th {
+    font-family: var(--mono); font-weight: 600; font-size: 0.68rem;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--chalk-faint); text-align: left;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+  }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); color: var(--chalk-dim); }
+  td .medal { margin-right: 8px; }
+  tr.first td { background: rgba(255, 181, 46, 0.06); }
+  tr.first td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+  tr.first .player-name { color: var(--amber); }
+  .player-name { font-weight: 600; }
+  .winpct-bar {
+    display: inline-block; vertical-align: middle;
+    width: 64px; height: 6px; border-radius: 3px;
+    background: var(--felt-600); margin-left: 10px;
+    overflow: hidden;
+  }
+  .winpct-bar i { display: block; height: 100%; background: var(--amber); border-radius: 3px; }
+
+  /* ---------- match log ---------- */
+  .match {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 13px 4px;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .match:last-child { border-bottom: none; }
+  .match .date {
+    font-family: var(--mono); font-size: 0.74rem;
+    color: var(--chalk-faint); min-width: 86px;
+  }
+  .match .scores { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .score-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--felt-700); border: 1px solid var(--line-soft);
+    font-size: 0.84rem;
+  }
+  .score-chip .pts { font-family: var(--mono); font-weight: 700; color: var(--chalk-dim); }
+  .score-chip.winner {
+    border-color: var(--amber);
+    background: rgba(255, 181, 46, 0.1);
+    box-shadow: 0 0 10px rgba(255, 181, 46, 0.15);
+  }
+  .score-chip.winner .pts { color: var(--amber); }
+  .score-chip.bust .pts { color: var(--red); }
+  .match .icon-btn {
+    background: transparent; border: none;
+    color: var(--chalk-faint); font-size: 0.95rem; padding: 4px 8px; border-radius: 6px;
+  }
+  .match .icon-btn:hover { color: var(--chalk); background: var(--felt-600); }
+  .match .icon-btn.del:hover { color: var(--red); background: rgba(255, 93, 71, 0.1); }
+  .match .exp {
+    background: transparent; border: 1px dashed var(--line);
+    color: var(--chalk-faint); font-size: 0.7rem;
+    padding: 4px 10px; border-radius: 999px;
+    letter-spacing: 0.05em;
+  }
+  .match .exp:hover { color: var(--amber); border-color: var(--amber); }
+  .match .note { flex-basis: 100%; font-size: 0.8rem; color: var(--chalk-faint); font-style: italic; padding-left: 100px; }
+  @media (max-width: 640px) { .match .note { padding-left: 0; } }
+
+  /* round-by-round detail inside history */
+  .round-detail { flex-basis: 100%; padding: 6px 0 4px 100px; }
+  @media (max-width: 640px) { .round-detail { padding-left: 0; } }
+  .round-detail .table-wrap {
+    border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--felt-900); max-width: 560px;
+  }
+  .round-detail table { font-size: 0.8rem; }
+  .round-detail th, .round-detail td { padding: 6px 10px; }
+  .round-detail td { font-family: var(--mono); color: var(--chalk-dim); }
+  .round-detail td.rn, .round-detail th.rn { color: var(--chalk-faint); font-family: var(--mono); font-size: 0.68rem; }
+  .round-detail tr.totals td {
+    border-top: 1px solid var(--line);
+    color: var(--chalk); font-weight: 700;
+  }
+  .round-detail tr.totals td.win { color: var(--amber); }
+  .round-detail tr.totals td.bust { color: var(--red); }
+
+  /* ---------- empty states ---------- */
+  .empty {
+    text-align: center; padding: 60px 20px;
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    background: var(--felt-800);
+  }
+  .empty .big { font-size: 3rem; margin-bottom: 14px; filter: grayscale(0.3); }
+  .empty h2 { font-family: var(--display); font-size: 1.3rem; color: var(--chalk); margin-bottom: 10px; }
+  .empty p { color: var(--chalk-faint); max-width: 380px; margin: 0 auto 22px; line-height: 1.6; }
+  .empty-sub { color: var(--chalk-faint); font-size: 0.88rem; text-align: center; padding: 26px 10px; }
+
+  /* ---------- dialogs ---------- */
+  dialog {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--felt-800);
+    color: var(--chalk);
+    padding: 26px;
+    width: min(480px, calc(100vw - 40px));
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  }
+  dialog#matchDialog { width: min(620px, calc(100vw - 40px)); }
+  dialog::backdrop { background: rgba(4, 8, 6, 0.75); backdrop-filter: blur(3px); }
+  dialog h2 {
+    font-family: var(--display); font-size: 1.2rem;
+    color: var(--amber); margin-bottom: 20px;
+    text-shadow: 0 0 16px var(--amber-glow);
+  }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-family: var(--mono); font-size: 0.68rem;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--chalk-faint); margin-bottom: 7px;
+  }
+  input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--sans); font-size: 0.95rem;
+    background: var(--felt-900);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--chalk);
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--amber);
+    box-shadow: 0 0 0 3px rgba(255, 181, 46, 0.15);
+  }
+  select:disabled { opacity: 0.6; }
+  .field-row { display: flex; gap: 12px; }
+  .field-row .field { flex: 1; }
+  .seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    flex: 1; padding: 10px 8px;
+    background: var(--felt-900); color: var(--chalk-faint);
+    font-size: 0.76rem; letter-spacing: 0.04em;
+  }
+  .seg button.on { background: var(--felt-600); color: var(--amber); }
+  .field .hint { font-size: 0.76rem; color: var(--chalk-faint); margin-top: 6px; letter-spacing: 0; text-transform: none; }
+
+  .entry-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+  .entry-row input.pname { flex: 1.6; }
+  .entry-row input.pscore { flex: 1; font-family: var(--mono); }
+  .entry-row .rm {
+    background: transparent; border: none; color: var(--chalk-faint);
+    font-size: 1.1rem; padding: 4px 6px;
+  }
+  .entry-row .rm:hover { color: var(--red); }
+
+  /* ---------- score pad (rounds mode) ---------- */
+  .pad-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--felt-900); }
+  table.pad { width: 100%; border-collapse: collapse; }
+  .pad th, .pad td { border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); padding: 4px; }
+  .pad th:last-child, .pad td:last-child { border-right: none; }
+  .pad thead th { padding: 6px; border-bottom: 1px solid var(--line); }
+  .pad .corner {
+    font-family: var(--mono); font-size: 0.66rem; color: var(--chalk-faint);
+    text-align: center; width: 44px; letter-spacing: 0.1em;
+  }
+  .pad thead .pcol { min-width: 96px; }
+  .pad thead .pcol .colhead { display: flex; align-items: center; gap: 2px; }
+  .pad input { border: none; background: transparent; border-radius: 6px; padding: 8px 6px; }
+  .pad input:focus { box-shadow: inset 0 0 0 1px var(--amber); }
+  .pad thead input { font-weight: 600; font-size: 0.88rem; }
+  .pad tbody input { font-family: var(--mono); text-align: center; font-size: 0.9rem; }
+  .pad tbody td.rn, .pad tfoot td.sig {
+    font-family: var(--mono); font-size: 0.7rem; color: var(--chalk-faint); text-align: center;
+  }
+  .pad .rm-col, .pad .rm-row {
+    background: transparent; border: none; color: var(--chalk-faint);
+    font-size: 0.85rem; padding: 2px 5px; border-radius: 4px; line-height: 1;
+  }
+  .pad .rm-col:hover, .pad .rm-row:hover { color: var(--red); }
+  .pad tfoot td {
+    font-family: var(--mono); font-weight: 700; text-align: center;
+    color: var(--amber); padding: 9px 6px;
+    border-top: 1px solid var(--line); border-bottom: none;
+    background: rgba(255, 181, 46, 0.04);
+  }
+  .pad tfoot td.bust { color: var(--red); }
+  .pad-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+  .form-error { color: var(--red); font-size: 0.82rem; margin-top: 12px; display: none; }
+  .form-error.show { display: block; }
+
+  /* champion callout */
+  .champ {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; margin-bottom: 22px;
+    border-radius: 10px;
+    background: linear-gradient(100deg, rgba(255, 181, 46, 0.12), rgba(255, 181, 46, 0.02));
+    border: 1px solid rgba(255, 181, 46, 0.4);
+  }
+  .champ .cup { font-size: 1.7rem; filter: drop-shadow(0 0 10px var(--amber-glow)); }
+  .champ .who { font-family: var(--display); font-size: 1.05rem; color: var(--amber); }
+  .champ .why { font-family: var(--mono); font-size: 0.72rem; color: var(--chalk-faint); margin-top: 3px; letter-spacing: 0.08em; }
+
+  /* ---------- sync ---------- */
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--chalk-faint); margin-right: 7px; vertical-align: 1px;
+  }
+  .dot.ok { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
+  .dot.syncing { background: var(--amber); animation: pulse 1s infinite; }
+  .dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .dot.offline { background: var(--red); opacity: 0.5; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .sync-copy { color: var(--chalk-dim); font-size: 0.88rem; line-height: 1.65; margin-bottom: 14px; }
+  .sync-copy a { color: var(--amber); }
+  .sync-copy code {
+    font-family: var(--mono); font-size: 0.8rem;
+    background: var(--felt-900); padding: 1px 6px; border-radius: 4px;
+  }
+  ol.sync-copy { padding-left: 20px; }
+  ol.sync-copy li { margin-bottom: 6px; }
+
+  .fade-in { animation: fadeUp 0.3s ease both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>🏆 Scoreboard</h1>
+      <div class="sub">Nikesh's game night records</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" id="syncBtn" title="Sync across devices"><span class="dot off" id="syncDot"></span>Sync</button>
+      <button class="btn btn-ghost btn-sm" id="exportBtn" title="Download all data as JSON">⇩ Export</button>
+      <button class="btn btn-ghost btn-sm" id="importBtn" title="Restore from a JSON export">⇧ Import</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button class="btn btn-amber" id="logMatchBtn">+ Log Match</button>
+    </div>
+  </header>
+
+  <div id="content"></div>
+</div>
+
+<!-- New game dialog -->
+<dialog id="gameDialog">
+  <h2 id="gameDialogTitle">New Game</h2>
+  <form id="gameForm" method="dialog" novalidate>
+    <div class="field-row">
+      <div class="field" style="flex: 0 0 90px;">
+        <label for="gameEmoji">Icon</label>
+        <input type="text" id="gameEmoji" placeholder="🎲" maxlength="4">
+      </div>
+      <div class="field">
+        <label for="gameName">Game name</label>
+        <input type="text" id="gameName" placeholder="Catan, FIFA, Poker…" required>
+      </div>
+    </div>
+    <div class="field">
+      <label>Scoring</label>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-mode="single" class="on">One score per match</button>
+        <button type="button" data-mode="rounds">Round by round</button>
+      </div>
+      <div class="hint" id="modeHint" hidden>Scores are entered per round on a score pad; totals decide the winner.</div>
+    </div>
+    <div class="field">
+      <label>Who wins?</label>
+      <div class="seg" id="dirSeg">
+        <button type="button" data-dir="high" class="on">Highest score</button>
+        <button type="button" data-dir="low">Lowest score</button>
+      </div>
+    </div>
+    <div class="field" id="targetField" hidden>
+      <label for="gameTarget">Game ends at (points, optional)</label>
+      <input type="number" id="gameTarget" placeholder="e.g. 100 for Skyjo" min="1" step="any">
+      <div class="hint">Totals at or past this number get flagged in red.</div>
+    </div>
+    <div class="form-error" id="gameError"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-amber">Save Game</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Log match dialog -->
+<dialog id="matchDialog">
+  <h2 id="matchDialogTitle">Log Match</h2>
+  <form id="matchForm" method="dialog" novalidate>
+    <div class="field-row">
+      <div class="field">
+        <label for="matchGame">Game</label>
+        <select id="matchGame"></select>
+      </div>
+      <div class="field" style="flex: 0 0 150px;">
+        <label for="matchDate">Date</label>
+        <input type="date" id="matchDate">
+      </div>
+    </div>
+
+    <!-- single-score entry -->
+    <div class="field" id="singleEntry">
+      <label>Players &amp; scores</label>
+      <div id="entryRows"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="addEntryBtn">+ Add player</button>
+    </div>
+
+    <!-- rounds score pad -->
+    <div class="field" id="padEntry" hidden>
+      <label>Score pad — one row per round</label>
+      <div class="pad-scroll"><table class="pad" id="padTable"></table></div>
+      <div class="pad-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="addRoundBtn">+ Add round</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="addPlayerBtn">+ Add player</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="matchNote">Note <span style="text-transform:none;letter-spacing:0;opacity:0.7">(optional)</span></label>
+      <input type="text" id="matchNote" placeholder="Comeback of the century…">
+    </div>
+    <div class="form-error" id="matchError"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-amber" id="matchSaveBtn">Save Match</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Sync dialog -->
+<dialog id="syncDialog">
+  <h2>Sync Across Devices</h2>
+  <div id="syncSetup">
+    <p class="sync-copy">Your scores sync through a <strong>private GitHub gist</strong> — free, nothing to host, no database. Set it up once per device with a GitHub token.</p>
+    <ol class="sync-copy">
+      <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Game+Night+Scoreboard" target="_blank" rel="noopener">Create a token on GitHub</a> (the <code>gist</code> scope is pre-selected — leave everything else off)</li>
+      <li>Press <em>Generate token</em>, copy it, and paste it below.</li>
+    </ol>
+    <div class="field">
+      <label for="syncToken">GitHub token</label>
+      <input type="password" id="syncToken" placeholder="ghp_…" autocomplete="off">
+    </div>
+    <div class="form-error" id="syncError"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn btn-amber" id="syncConnectBtn">Connect</button>
+    </div>
+  </div>
+  <div id="syncConnected" hidden>
+    <p class="sync-copy" id="syncInfo"></p>
+    <p class="sync-copy">Scores push automatically after every change and pull whenever you open or return to the app. If two devices edit at the same time, the most recent save wins.</p>
+    <div class="form-error" id="syncError2"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-danger" id="syncDisconnectBtn">Disconnect</button>
+      <button type="button" class="btn" data-close>Close</button>
+      <button type="button" class="btn btn-amber" id="syncNowBtn">Sync now</button>
+    </div>
+  </div>
+</dialog>
+
+<datalist id="playerList"></datalist>
+
+<script>
+(() => {
+  const STORE_KEY = "gaming-records-v1";
+
+  // ---------- state ----------
+  const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const load = () => {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (Array.isArray(d.games) && Array.isArray(d.matches)) { d.updatedAt = d.updatedAt || 0; return d; }
+      }
+    } catch (e) { /* corrupted -> start fresh */ }
+    return {
+      games: [{ id: uid(), name: "Skyjo", emoji: "🃏", direction: "low", mode: "rounds", target: 100 }],
+      matches: [],
+      updatedAt: 0,
+    };
+  };
+  let state = load();
+  let selectedGameId = state.games[0]?.id ?? null;
+  const save = () => {
+    state.updatedAt = Date.now();
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    schedulePush();
+  };
+
+  // ---------- helpers ----------
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDate = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "2-digit" });
+  };
+  const todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const fmtScore = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1);
+
+  const gameById = (id) => state.games.find((g) => g.id === id);
+  const matchesFor = (gameId) =>
+    state.matches.filter((m) => m.gameId === gameId).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+
+  // Normalize both match shapes to [{player, score}] — rounds matches sum their rounds.
+  const matchEntries = (m) =>
+    m.entries ?? m.players.map((p, i) => ({ player: p, score: m.rounds.reduce((s, r) => s + (r[i] || 0), 0) }));
+
+  const winnersOf = (match, game) => {
+    const entries = matchEntries(match);
+    const scores = entries.map((e) => e.score);
+    const best = game.direction === "low" ? Math.min(...scores) : Math.max(...scores);
+    return new Set(entries.filter((e) => e.score === best).map((e) => e.player));
+  };
+
+  const isBust = (game, score) => game.mode === "rounds" && game.target != null &&
+    (game.direction === "low" ? score >= game.target : score >= game.target);
+
+  const allPlayers = () => {
+    const set = new Set();
+    state.matches.forEach((m) => matchEntries(m).forEach((e) => set.add(e.player)));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  };
+
+  const leaderboard = (gameId) => {
+    const game = gameById(gameId);
+    const rows = new Map();
+    matchesFor(gameId).forEach((m) => {
+      const winners = winnersOf(m, game);
+      matchEntries(m).forEach((e) => {
+        const r = rows.get(e.player) || { player: e.player, played: 0, wins: 0, best: null };
+        r.played++;
+        if (winners.has(e.player)) r.wins++;
+        if (r.best === null || (game.direction === "low" ? e.score < r.best : e.score > r.best)) r.best = e.score;
+        rows.set(e.player, r);
+      });
+    });
+    return [...rows.values()].sort((a, b) => b.wins - a.wins || (b.wins / b.played) - (a.wins / a.played) || b.played - a.played);
+  };
+
+  const bestRoundOf = (gameId) => {
+    const game = gameById(gameId);
+    let best = null;
+    matchesFor(gameId).forEach((m) => {
+      if (!m.rounds) return;
+      m.rounds.forEach((r) => m.players.forEach((p, i) => {
+        const s = r[i];
+        if (typeof s !== "number") return;
+        if (best === null || (game.direction === "low" ? s < best.score : s > best.score)) best = { player: p, score: s };
+      }));
+    });
+    return best;
+  };
+
+  // ---------- rendering ----------
+  const content = $("#content");
+
+  function render() {
+    refreshPlayerDatalist();
+    if (state.games.length === 0) { renderWelcome(); return; }
+    if (!gameById(selectedGameId)) selectedGameId = state.games[0].id;
+
+    content.innerHTML = `
+      <div class="layout">
+        <nav class="rail">
+          <div class="rail-label">Games</div>
+          ${state.games.map((g) => `
+            <button class="game-tab ${g.id === selectedGameId ? "active" : ""}" data-game="${g.id}">
+              <span class="emoji">${esc(g.emoji || "🎲")}</span>
+              <span>${esc(g.name)}</span>
+              <span class="count">${matchesFor(g.id).length}</span>
+            </button>`).join("")}
+          <button class="btn btn-ghost" id="newGameBtn" style="margin-top: 8px;">+ New Game</button>
+        </nav>
+        <main id="gameView"></main>
+      </div>`;
+
+    content.querySelectorAll(".game-tab").forEach((el) =>
+      el.addEventListener("click", () => { selectedGameId = el.dataset.game; render(); }));
+    $("#newGameBtn").addEventListener("click", openGameDialog);
+    renderGameView();
+  }
+
+  function renderWelcome() {
+    content.innerHTML = `
+      <div class="empty fade-in">
+        <div class="big">🎲🃏🎮</div>
+        <h2>No games on the board yet</h2>
+        <p>Add the games you play — board games, video games, cards, darts — then log every match to build your leaderboards.</p>
+        <button class="btn btn-amber" id="firstGameBtn">+ Add Your First Game</button>
+      </div>`;
+    $("#firstGameBtn").addEventListener("click", openGameDialog);
+  }
+
+  function renderGameView() {
+    const game = gameById(selectedGameId);
+    const matches = matchesFor(game.id);
+    const lb = leaderboard(game.id);
+    const view = $("#gameView");
+
+    if (matches.length === 0) {
+      view.innerHTML = `
+        <div class="panel fade-in">
+          <div class="panel-head">
+            <div class="panel-title">${esc(game.emoji || "🎲")} ${esc(game.name)}</div>
+            <div>
+              <button class="btn btn-sm btn-danger" id="deleteGameBtn">Delete game</button>
+            </div>
+          </div>
+          <div class="empty-sub">No matches yet — hit <strong style="color: var(--amber)">+ Log Match</strong> after your next game of ${esc(game.name)}.</div>
+        </div>`;
+      $("#deleteGameBtn").addEventListener("click", () => deleteGame(game.id));
+      return;
+    }
+
+    const champ = lb[0];
+    const bestRow = lb.reduce((acc, r) => {
+      if (acc === null) return r;
+      return (game.direction === "low" ? r.best < acc.best : r.best > acc.best) ? r : acc;
+    }, null);
+    const bestRound = game.mode === "rounds" ? bestRoundOf(game.id) : null;
+    const medals = ["🥇", "🥈", "🥉"];
+    const totalWord = game.mode === "rounds" ? "total" : "";
+
+    view.innerHTML = `
+      <div class="fade-in">
+        <div class="champ">
+          <span class="cup">👑</span>
+          <div>
+            <div class="who">${esc(champ.player)} leads ${esc(game.name)}</div>
+            <div class="why">${champ.wins} win${champ.wins === 1 ? "" : "s"} in ${champ.played} match${champ.played === 1 ? "" : "es"}</div>
+          </div>
+        </div>
+
+        <div class="tiles">
+          <div class="tile"><div class="k">Matches</div><div class="v">${matches.length}</div></div>
+          <div class="tile"><div class="k">Players</div><div class="v">${lb.length}</div></div>
+          <div class="tile"><div class="k">Best ${totalWord} ${game.direction === "low" ? "(lowest)" : "(highest)"}</div>
+            <div class="v small">${fmtScore(bestRow.best)} · ${esc(bestRow.player)}</div></div>
+          ${bestRound ? `<div class="tile"><div class="k">Best round</div>
+            <div class="v small">${fmtScore(bestRound.score)} · ${esc(bestRound.player)}</div></div>` : ""}
+          <div class="tile"><div class="k">Last played</div><div class="v small">${fmtDate(matches[0].date)}</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Leaderboard <span class="em">·</span> ${esc(game.name)}</div>
+            <button class="btn btn-sm btn-danger" id="deleteGameBtn">Delete game</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Player</th><th class="num">Wins</th><th class="num">Played</th>
+                <th class="num">Win %</th><th class="num">Best${totalWord ? " total" : ""}</th>
+              </tr></thead>
+              <tbody>
+                ${lb.map((r, i) => `
+                  <tr class="${i === 0 ? "first" : ""}">
+                    <td><span class="medal">${medals[i] || "&nbsp;&nbsp;"}</span><span class="player-name">${esc(r.player)}</span></td>
+                    <td class="num">${r.wins}</td>
+                    <td class="num">${r.played}</td>
+                    <td class="num">${Math.round((r.wins / r.played) * 100)}%<span class="winpct-bar"><i style="width:${Math.round((r.wins / r.played) * 100)}%"></i></span></td>
+                    <td class="num">${fmtScore(r.best)}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Match History</div>
+          </div>
+          ${matches.map((m) => renderMatchRow(m, game)).join("")}
+        </div>
+      </div>`;
+
+    $("#deleteGameBtn").addEventListener("click", () => deleteGame(game.id));
+    view.querySelectorAll("[data-del]").forEach((el) =>
+      el.addEventListener("click", () => {
+        if (!confirm("Delete this match?")) return;
+        state.matches = state.matches.filter((m) => m.id !== el.dataset.del);
+        save(); render();
+      }));
+    view.querySelectorAll("[data-edit]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const m = state.matches.find((x) => x.id === el.dataset.edit);
+        if (m) openMatchDialog(m);
+      }));
+    view.querySelectorAll("[data-exp]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const d = view.querySelector(`.round-detail[data-detail="${el.dataset.exp}"]`);
+        const open = !d.hidden;
+        d.hidden = open;
+        el.textContent = el.textContent.replace(open ? "▾" : "▸", open ? "▸" : "▾");
+      }));
+  }
+
+  function renderMatchRow(m, game) {
+    const winners = winnersOf(m, game);
+    const entries = matchEntries(m);
+    const roundsBtn = m.rounds
+      ? `<button class="exp" data-exp="${m.id}">▸ ${m.rounds.length} round${m.rounds.length === 1 ? "" : "s"}</button>`
+      : "";
+    const detail = m.rounds ? `
+      <div class="round-detail" data-detail="${m.id}" hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th class="rn">Rnd</th>${m.players.map((p) => `<th>${esc(p)}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${m.rounds.map((r, ri) => `
+                <tr><td class="rn">${ri + 1}</td>${m.players.map((_, pi) => `<td>${fmtScore(r[pi])}</td>`).join("")}</tr>`).join("")}
+              <tr class="totals"><td class="rn">Σ</td>${entries.map((e) => `
+                <td class="${winners.has(e.player) ? "win" : ""} ${isBust(game, e.score) ? "bust" : ""}">${fmtScore(e.score)}</td>`).join("")}</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>` : "";
+    return `
+      <div class="match">
+        <span class="date">${fmtDate(m.date)}</span>
+        <span class="scores">
+          ${entries.map((e) => `
+            <span class="score-chip ${winners.has(e.player) ? "winner" : ""} ${isBust(game, e.score) ? "bust" : ""}">
+              ${winners.has(e.player) ? "🏆 " : ""}${esc(e.player)} <span class="pts">${fmtScore(e.score)}</span>
+            </span>`).join("")}
+        </span>
+        ${roundsBtn}
+        <button class="icon-btn" data-edit="${m.id}" title="Edit match">✎</button>
+        <button class="icon-btn del" data-del="${m.id}" title="Delete match">✕</button>
+        ${m.note ? `<span class="note">“${esc(m.note)}”</span>` : ""}
+        ${detail}
+      </div>`;
+  }
+
+  function deleteGame(id) {
+    const g = gameById(id);
+    const n = matchesFor(id).length;
+    if (!confirm(`Delete "${g.name}"${n ? ` and its ${n} match${n === 1 ? "" : "es"}` : ""}? This can't be undone.`)) return;
+    state.games = state.games.filter((x) => x.id !== id);
+    state.matches = state.matches.filter((m) => m.gameId !== id);
+    selectedGameId = state.games[0]?.id ?? null;
+    save(); render();
+  }
+
+  function refreshPlayerDatalist() {
+    $("#playerList").innerHTML = allPlayers().map((p) => `<option value="${esc(p)}">`).join("");
+  }
+
+  // ---------- new game dialog ----------
+  const gameDialog = $("#gameDialog");
+  let gameDir = "high";
+  let gameMode = "single";
+
+  const syncGameDialogSegs = () => {
+    $("#dirSeg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.dir === gameDir));
+    $("#modeSeg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.mode === gameMode));
+    $("#targetField").hidden = gameMode !== "rounds";
+    $("#modeHint").hidden = gameMode !== "rounds";
+  };
+
+  $("#dirSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-dir]");
+    if (!b) return;
+    gameDir = b.dataset.dir;
+    syncGameDialogSegs();
+  });
+  $("#modeSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    gameMode = b.dataset.mode;
+    syncGameDialogSegs();
+  });
+
+  function openGameDialog() {
+    $("#gameForm").reset();
+    gameDir = "high";
+    gameMode = "single";
+    syncGameDialogSegs();
+    $("#gameError").classList.remove("show");
+    gameDialog.showModal();
+    $("#gameName").focus();
+  }
+
+  $("#gameForm").addEventListener("submit", (e) => {
+    const name = $("#gameName").value.trim();
+    if (!name) {
+      e.preventDefault();
+      const err = $("#gameError");
+      err.textContent = "Give the game a name.";
+      err.classList.add("show");
+      return;
+    }
+    const targetRaw = $("#gameTarget").value.trim();
+    const game = {
+      id: uid(), name,
+      emoji: $("#gameEmoji").value.trim(),
+      direction: gameDir,
+      mode: gameMode,
+      target: gameMode === "rounds" && targetRaw !== "" && !isNaN(Number(targetRaw)) ? Number(targetRaw) : null,
+    };
+    state.games.push(game);
+    selectedGameId = game.id;
+    save(); render();
+  });
+
+  // ---------- log match dialog ----------
+  const matchDialog = $("#matchDialog");
+  const entryRows = $("#entryRows");
+  let editingId = null;
+
+  // --- single-score rows ---
+  function addEntryRow(name = "", score = "") {
+    const row = document.createElement("div");
+    row.className = "entry-row";
+    row.innerHTML = `
+      <input type="text" class="pname" placeholder="Player" list="playerList" value="${esc(name)}">
+      <input type="number" class="pscore" placeholder="Score" step="any" value="${esc(score)}">
+      <button type="button" class="rm" title="Remove player">✕</button>`;
+    row.querySelector(".rm").addEventListener("click", () => {
+      if (entryRows.children.length > 2) row.remove();
+    });
+    entryRows.appendChild(row);
+  }
+  $("#addEntryBtn").addEventListener("click", () => addEntryRow());
+
+  // --- rounds score pad (model + render) ---
+  let pad = { players: [], rounds: [] };
+  const padTable = $("#padTable");
+
+  function renderPad() {
+    padTable.innerHTML = `
+      <thead><tr>
+        <th class="corner">Rnd</th>
+        ${pad.players.map((p, i) => `
+          <th class="pcol"><span class="colhead">
+            <input type="text" placeholder="Player" list="playerList" data-p="${i}" value="${esc(p)}">
+            ${pad.players.length > 2 ? `<button type="button" class="rm-col" data-rmcol="${i}" title="Remove player">✕</button>` : ""}
+          </span></th>`).join("")}
+      </tr></thead>
+      <tbody>
+        ${pad.rounds.map((r, ri) => `
+          <tr>
+            <td class="rn">${ri + 1}${pad.rounds.length > 1 ? ` <button type="button" class="rm-row" data-rmrow="${ri}" title="Remove round">✕</button>` : ""}</td>
+            ${pad.players.map((_, pi) => `<td><input type="number" step="any" inputmode="numeric" data-r="${ri}" data-c="${pi}" value="${esc(r[pi] ?? "")}"></td>`).join("")}
+          </tr>`).join("")}
+      </tbody>
+      <tfoot><tr>
+        <td class="sig">Σ</td>
+        ${pad.players.map((_, pi) => `<td data-tot="${pi}">0</td>`).join("")}
+      </tr></tfoot>`;
+    updatePadTotals();
+  }
+
+  function updatePadTotals() {
+    const game = gameById($("#matchGame").value);
+    pad.players.forEach((_, pi) => {
+      const total = pad.rounds.reduce((s, r) => s + (Number(r[pi]) || 0), 0);
+      const cell = padTable.querySelector(`[data-tot="${pi}"]`);
+      if (!cell) return;
+      cell.textContent = fmtScore(total);
+      cell.classList.toggle("bust", !!game && isBust(game, total));
+    });
+  }
+
+  padTable.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.dataset.p !== undefined) pad.players[Number(t.dataset.p)] = t.value;
+    if (t.dataset.r !== undefined) {
+      pad.rounds[Number(t.dataset.r)][Number(t.dataset.c)] = t.value;
+      updatePadTotals();
+    }
+  });
+  padTable.addEventListener("click", (e) => {
+    const rc = e.target.closest("[data-rmcol]");
+    if (rc) {
+      const i = Number(rc.dataset.rmcol);
+      pad.players.splice(i, 1);
+      pad.rounds.forEach((r) => r.splice(i, 1));
+      renderPad();
+      return;
+    }
+    const rr = e.target.closest("[data-rmrow]");
+    if (rr) {
+      pad.rounds.splice(Number(rr.dataset.rmrow), 1);
+      renderPad();
+    }
+  });
+
+  $("#addRoundBtn").addEventListener("click", () => {
+    pad.rounds.push(pad.players.map(() => ""));
+    renderPad();
+    const firstNew = padTable.querySelector(`[data-r="${pad.rounds.length - 1}"][data-c="0"]`);
+    if (firstNew) firstNew.focus();
+  });
+  $("#addPlayerBtn").addEventListener("click", () => {
+    pad.players.push("");
+    pad.rounds.forEach((r) => r.push(""));
+    renderPad();
+  });
+
+  // --- dialog open / mode switch ---
+  function setEntryMode(game) {
+    const rounds = game.mode === "rounds";
+    $("#singleEntry").hidden = rounds;
+    $("#padEntry").hidden = !rounds;
+  }
+
+  function initEntryArea(game, match = null) {
+    if (game.mode === "rounds") {
+      if (match) {
+        pad = { players: [...match.players], rounds: match.rounds.map((r) => [...r]) };
+      } else {
+        const recent = matchesFor(game.id).find((m) => m.rounds);
+        const players = recent ? [...recent.players] : ["", "", "", ""];
+        pad = { players, rounds: [players.map(() => "")] };
+      }
+      renderPad();
+    } else {
+      entryRows.innerHTML = "";
+      if (match) match.entries.forEach((e) => addEntryRow(e.player, e.score));
+      else {
+        const recent = matchesFor(game.id).find((m) => m.entries);
+        if (recent) recent.entries.forEach((e) => addEntryRow(e.player));
+        else { addEntryRow(); addEntryRow(); }
+      }
+      while (entryRows.children.length < 2) addEntryRow();
+    }
+    setEntryMode(game);
+  }
+
+  function openMatchDialog(match = null) {
+    if (state.games.length === 0) { openGameDialog(); return; }
+    editingId = match ? match.id : null;
+    $("#matchForm").reset();
+    $("#matchDialogTitle").textContent = match ? "Edit Match" : "Log Match";
+    const gameId = match ? match.gameId : selectedGameId;
+    $("#matchGame").innerHTML = state.games.map((g) =>
+      `<option value="${g.id}" ${g.id === gameId ? "selected" : ""}>${esc(g.emoji ? g.emoji + " " : "")}${esc(g.name)}</option>`).join("");
+    $("#matchGame").disabled = !!match;
+    $("#matchDate").value = match ? match.date : todayISO();
+    $("#matchNote").value = match ? (match.note || "") : "";
+    initEntryArea(gameById(gameId), match);
+    $("#matchError").classList.remove("show");
+    matchDialog.showModal();
+  }
+
+  $("#matchGame").addEventListener("change", () => {
+    if (editingId) return;
+    initEntryArea(gameById($("#matchGame").value));
+  });
+
+  $("#logMatchBtn").addEventListener("click", () => openMatchDialog());
+
+  // --- save ---
+  const fail = (e, msg) => {
+    e.preventDefault();
+    const err = $("#matchError");
+    err.textContent = msg;
+    err.classList.add("show");
+  };
+
+  $("#matchForm").addEventListener("submit", (e) => {
+    const game = gameById($("#matchGame").value);
+    let matchData;
+
+    if (game.mode === "rounds") {
+      // ignore columns that are completely unused (no name, no scores)
+      const keep = pad.players.map((p, i) =>
+        p.trim() !== "" || pad.rounds.some((r) => String(r[i] ?? "").trim() !== ""));
+      const players = pad.players.filter((_, i) => keep[i]).map((p) => p.trim());
+      const usedRounds = pad.rounds.map((r) => r.filter((_, i) => keep[i]));
+      if (players.some((p) => !p)) return fail(e, "Every column needs a player name.");
+      const seen = new Set();
+      for (const p of players) {
+        if (seen.has(p.toLowerCase())) return fail(e, `"${p}" appears twice.`);
+        seen.add(p.toLowerCase());
+      }
+      if (players.length < 2) return fail(e, "Add at least two players.");
+      if (usedRounds.length < 1) return fail(e, "Add at least one round.");
+      const rounds = [];
+      for (let ri = 0; ri < usedRounds.length; ri++) {
+        const row = [];
+        for (let pi = 0; pi < players.length; pi++) {
+          const v = String(usedRounds[ri][pi]).trim();
+          if (v === "" || isNaN(Number(v))) return fail(e, `Round ${ri + 1}: every player needs a numeric score.`);
+          row.push(Number(v));
+        }
+        rounds.push(row);
+      }
+      matchData = { gameId: game.id, players, rounds };
+    } else {
+      const entries = [];
+      const seen = new Set();
+      for (const row of entryRows.children) {
+        const player = row.querySelector(".pname").value.trim();
+        const scoreRaw = row.querySelector(".pscore").value.trim();
+        if (!player && !scoreRaw) continue;
+        if (!player || scoreRaw === "" || isNaN(Number(scoreRaw)))
+          return fail(e, "Every row needs a player name and a numeric score.");
+        const key = player.toLowerCase();
+        if (seen.has(key)) return fail(e, `"${player}" appears twice.`);
+        seen.add(key);
+        entries.push({ player, score: Number(scoreRaw) });
+      }
+      if (entries.length < 1) return fail(e, "Add at least one player with a score.");
+      matchData = { gameId: game.id, entries };
+    }
+
+    matchData.date = $("#matchDate").value || todayISO();
+    matchData.note = $("#matchNote").value.trim();
+
+    if (editingId) {
+      const idx = state.matches.findIndex((m) => m.id === editingId);
+      state.matches[idx] = { ...matchData, id: editingId, createdAt: state.matches[idx].createdAt };
+    } else {
+      state.matches.push({ ...matchData, id: uid(), createdAt: Date.now() });
+    }
+    selectedGameId = game.id;
+    save(); render();
+  });
+
+  // close buttons
+  document.querySelectorAll("dialog [data-close]").forEach((b) =>
+    b.addEventListener("click", () => b.closest("dialog").close()));
+
+  // ---------- export / import ----------
+  $("#exportBtn").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `gaming-records-${todayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  $("#importBtn").addEventListener("click", () => $("#importFile").click());
+  $("#importFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      if (!Array.isArray(d.games) || !Array.isArray(d.matches)) throw new Error("bad shape");
+      if (!confirm(`Import ${d.games.length} games and ${d.matches.length} matches? This replaces current data.`)) return;
+      state = d;
+      selectedGameId = state.games[0]?.id ?? null;
+      save(); render();
+    } catch {
+      alert("That file doesn't look like a Scoreboard export.");
+    } finally {
+      e.target.value = "";
+    }
+  });
+
+  // ---------- cloud sync (private GitHub gist) ----------
+  const SYNC_KEY = "gaming-records-sync-v1";
+  const GIST_FILE = "gaming-records.json";
+  let sync = null;
+  try { sync = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); } catch { /* ignore */ }
+  let pushTimer = null, pushing = false, pushQueued = false;
+
+  const STATUS_TITLES = {
+    off: "Sync off — click to set up",
+    syncing: "Syncing…",
+    ok: "Synced",
+    error: "Sync error — click for details",
+    offline: "Offline — will retry when back online",
+  };
+  let lastSyncError = "";
+  const setSyncStatus = (status, msg = "") => {
+    lastSyncError = (status === "error" || status === "offline") ? msg : "";
+    $("#syncDot").className = "dot " + status;
+    $("#syncBtn").title = msg || STATUS_TITLES[status];
+  };
+
+  const api = async (path, opts = {}) => {
+    const res = await fetch("https://api.github.com" + path, {
+      ...opts,
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": "Bearer " + sync.token,
+        ...(opts.body ? { "Content-Type": "application/json" } : {}),
+      },
+    });
+    if (!res.ok) throw new Error(res.status === 401 ? "token rejected (401)" : `GitHub API error ${res.status}`);
+    return res.json();
+  };
+
+  function schedulePush() {
+    if (!sync) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushNow, 1200);
+  }
+
+  async function pushNow() {
+    if (!sync) return;
+    if (pushing) { pushQueued = true; return; }
+    pushing = true;
+    setSyncStatus("syncing");
+    try {
+      await api("/gists/" + sync.gistId, {
+        method: "PATCH",
+        body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(state) } } }),
+      });
+      setSyncStatus("ok");
+    } catch (err) {
+      setSyncStatus(navigator.onLine === false ? "offline" : "error", "Push failed: " + err.message);
+    } finally {
+      pushing = false;
+      if (pushQueued) { pushQueued = false; pushNow(); }
+    }
+  }
+
+  async function pullNow() {
+    if (!sync) return;
+    setSyncStatus("syncing");
+    try {
+      const g = await api("/gists/" + sync.gistId);
+      const f = g.files[GIST_FILE];
+      if (!f) throw new Error("data file missing from gist");
+      const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+      const remote = JSON.parse(text);
+      if (Array.isArray(remote.games) && Array.isArray(remote.matches) &&
+          (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+        state = remote;
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+        if (!gameById(selectedGameId)) selectedGameId = state.games[0]?.id ?? null;
+        render();
+      }
+      setSyncStatus("ok");
+    } catch (err) {
+      setSyncStatus(navigator.onLine === false ? "offline" : "error", "Pull failed: " + err.message);
+    }
+  }
+
+  async function connectSync(token) {
+    sync = { token, gistId: null };
+    const gists = await api("/gists?per_page=100");
+    const existing = gists.find((g) => g.files && g.files[GIST_FILE]);
+    if (existing) {
+      sync.gistId = existing.id;
+    } else {
+      const created = await api("/gists", {
+        method: "POST",
+        body: JSON.stringify({
+          description: "Game Night Scoreboard — synced data",
+          public: false,
+          files: { [GIST_FILE]: { content: JSON.stringify(state) } },
+        }),
+      });
+      sync.gistId = created.id;
+    }
+    localStorage.setItem(SYNC_KEY, JSON.stringify(sync));
+    await pullNow();   // adopt the other device's data if it's newer
+    await pushNow();   // otherwise publish ours
+  }
+
+  // --- sync dialog wiring ---
+  const syncDialog = $("#syncDialog");
+  function openSyncDialog() {
+    $("#syncSetup").hidden = !!sync;
+    $("#syncConnected").hidden = !sync;
+    $("#syncError").classList.remove("show");
+    const err2 = $("#syncError2");
+    err2.textContent = lastSyncError;
+    err2.classList.toggle("show", !!lastSyncError);
+    if (sync) {
+      $("#syncInfo").innerHTML =
+        `✓ Connected — data lives in a <a href="https://gist.github.com/${esc(sync.gistId)}" target="_blank" rel="noopener">private gist</a> on your GitHub account.`;
+    } else {
+      $("#syncToken").value = "";
+    }
+    syncDialog.showModal();
+  }
+  $("#syncBtn").addEventListener("click", openSyncDialog);
+
+  $("#syncConnectBtn").addEventListener("click", async () => {
+    const token = $("#syncToken").value.trim();
+    const err = $("#syncError");
+    err.classList.remove("show");
+    if (!token) { err.textContent = "Paste a token first."; err.classList.add("show"); return; }
+    const btn = $("#syncConnectBtn");
+    btn.disabled = true; btn.textContent = "Connecting…";
+    try {
+      await connectSync(token);
+      syncDialog.close();
+    } catch (ex) {
+      sync = null;
+      localStorage.removeItem(SYNC_KEY);
+      setSyncStatus("off");
+      err.textContent = "Couldn't connect: " + ex.message;
+      err.classList.add("show");
+    } finally {
+      btn.disabled = false; btn.textContent = "Connect";
+    }
+  });
+
+  $("#syncDisconnectBtn").addEventListener("click", () => {
+    if (!confirm("Stop syncing on this device? Your scores stay here and in the gist — this only removes the token from this browser.")) return;
+    sync = null;
+    localStorage.removeItem(SYNC_KEY);
+    setSyncStatus("off");
+    syncDialog.close();
+  });
+
+  $("#syncNowBtn").addEventListener("click", async () => {
+    await pullNow();
+    await pushNow();
+    openSyncDialog(); // refresh status/error text
+  });
+
+  // pull when returning to the app (phone -> laptop -> phone)
+  document.addEventListener("visibilitychange", () => { if (sync && !document.hidden) pullNow(); });
+  window.addEventListener("online", () => { if (sync) { pullNow(); schedulePush(); } });
+
+  render();
+  if (sync) pullNow(); else setSyncStatus("off");
+})();
+</script>
+</body>
+</html>
