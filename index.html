@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script>
+  // set theme before first paint to avoid a flash of the wrong mode
+  document.documentElement.dataset.theme =
+    localStorage.getItem("gaming-records-theme") ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+</script>
 <style>
   :root {
     --felt-900: #0b120e;
@@ -24,10 +30,38 @@
     --amber-glow: rgba(255, 181, 46, 0.35);
     --red: #ff5d47;
     --teal: #4fd1a5;
+    --accent-fill: #ffb52e;
+    --accent-ink: #221500;
+    --accent-hover: #ffc45a;
+    --amber-shadow: #5d3c00;
+    --grain-opacity: 0.5;
+    --backdrop: rgba(4, 8, 6, 0.75);
     --display: "Bungee", cursive;
     --mono: "IBM Plex Mono", monospace;
     --sans: "IBM Plex Sans", sans-serif;
   }
+
+  /* light mode — aged scorecard paper */
+  :root[data-theme="light"] {
+    --felt-900: #ede7d3;
+    --felt-800: #f7f3e6;
+    --felt-700: #efe9d6;
+    --felt-600: #e3dcc4;
+    --line: #c9c0a2;
+    --line-soft: #d8d0b5;
+    --chalk: #23301f;
+    --chalk-dim: #4a5844;
+    --chalk-faint: #7c8571;
+    --amber: #9c6b00;
+    --amber-deep: #7a5300;
+    --amber-glow: rgba(156, 107, 0, 0.15);
+    --red: #c23a24;
+    --teal: #1d7d5b;
+    --amber-shadow: rgba(0, 0, 0, 0.12);
+    --grain-opacity: 0.35;
+    --backdrop: rgba(62, 56, 36, 0.45);
+  }
+  :root[data-theme="light"] { color-scheme: light; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -48,7 +82,7 @@
     content: "";
     position: fixed; inset: 0;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: var(--grain-opacity);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
     z-index: 1;
   }
@@ -69,7 +103,7 @@
     letter-spacing: 0.02em;
     line-height: 1;
     color: var(--amber);
-    text-shadow: 0 0 22px var(--amber-glow), 0 2px 0 #5d3c00;
+    text-shadow: 0 0 22px var(--amber-glow), 0 2px 0 var(--amber-shadow);
   }
   .brand .sub {
     font-family: var(--mono);
@@ -97,11 +131,11 @@
   }
   .btn:hover { background: var(--felt-700); border-color: var(--chalk-faint); }
   .btn-amber {
-    background: var(--amber); color: #221500;
+    background: var(--accent-fill); color: var(--accent-ink);
     border: 1px solid var(--amber-deep);
     box-shadow: 0 0 18px rgba(255, 181, 46, 0.25), inset 0 -2px 0 rgba(0,0,0,0.2);
   }
-  .btn-amber:hover { background: #ffc45a; }
+  .btn-amber:hover { background: var(--accent-hover); }
   .btn-ghost { background: transparent; border: 1px dashed var(--line); color: var(--chalk-dim); }
   .btn-ghost:hover { color: var(--chalk); border-color: var(--chalk-faint); background: transparent; }
   .btn-sm { padding: 6px 12px; font-size: 0.72rem; }
@@ -296,7 +330,7 @@
     box-shadow: 0 24px 80px rgba(0,0,0,0.6);
   }
   dialog#matchDialog { width: min(620px, calc(100vw - 40px)); }
-  dialog::backdrop { background: rgba(4, 8, 6, 0.75); backdrop-filter: blur(3px); }
+  dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
   dialog h2 {
     font-family: var(--display); font-size: 1.2rem;
     color: var(--amber); margin-bottom: 20px;
@@ -423,6 +457,7 @@
       <div class="sub">Nikesh's game night records</div>
     </div>
     <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" id="themeBtn"></button>
       <button class="btn btn-ghost btn-sm" id="syncBtn" title="Sync across devices"><span class="dot off" id="syncDot"></span>Sync</button>
       <button class="btn btn-ghost btn-sm" id="exportBtn" title="Download all data as JSON">⇩ Export</button>
       <button class="btn btn-ghost btn-sm" id="importBtn" title="Restore from a JSON export">⇧ Import</button>
@@ -1115,6 +1150,22 @@
     selectedGameId = game.id;
     save(); render();
   });
+
+  // ---------- theme toggle ----------
+  const THEME_KEY = "gaming-records-theme";
+  const themeBtn = $("#themeBtn");
+  const syncThemeBtn = () => {
+    const dark = document.documentElement.dataset.theme !== "light";
+    themeBtn.textContent = dark ? "☀ Light" : "☾ Dark";
+    themeBtn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+  };
+  themeBtn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem(THEME_KEY, next);
+    syncThemeBtn();
+  });
+  syncThemeBtn();
 
   // close buttons
   document.querySelectorAll("dialog [data-close]").forEach((b) =>
