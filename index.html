@@ -483,8 +483,8 @@
   .score-chip.winner .pbadge { color: var(--amber); border-color: var(--amber); }
   .pcheck { color: var(--amber); font-size: 0.7rem; }
 
-  /* live standings under the score pad */
-  #padStandings { margin-top: 14px; }
+  /* live standings above the score pad */
+  #padStandings:not(:empty) { margin-bottom: 18px; }
   #padStandings label { margin-bottom: 7px; }
   table.standings { font-size: 0.84rem; }
   .standings th { padding: 7px 10px; }
@@ -636,13 +636,13 @@
 
     <!-- rounds score pad -->
     <div class="field" id="padEntry" hidden>
+      <div id="padStandings"></div>
       <label>Score pad — one row per round</label>
       <div class="pad-scroll"><table class="pad" id="padTable"></table></div>
       <div class="pad-actions">
         <button type="button" class="btn btn-ghost btn-sm" id="addRoundBtn">+ Add round</button>
         <button type="button" class="btn btn-ghost btn-sm" id="addPlayerBtn">+ Add player</button>
       </div>
-      <div id="padStandings"></div>
     </div>
 
     <div class="field">
