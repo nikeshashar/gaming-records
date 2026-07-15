@@ -356,6 +356,8 @@
   }
   .fs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
   .fs-head h2 { margin-bottom: 0; }
+  .fs-head-btns { display: flex; gap: 8px; }
+  #themeBtnDialog:hover { color: var(--amber); border-color: var(--amber); }
   .fs-close {
     background: var(--felt-600); border: 1px solid var(--line);
     color: var(--chalk-dim); border-radius: 8px;
@@ -609,7 +611,10 @@
   <form id="matchForm" class="fs-body" method="dialog" novalidate>
     <div class="fs-head">
       <h2 id="matchDialogTitle">Log Match</h2>
-      <button type="button" class="fs-close" data-close title="Close">✕</button>
+      <span class="fs-head-btns">
+        <button type="button" class="fs-close" id="themeBtnDialog" title="Toggle theme">☀</button>
+        <button type="button" class="fs-close" data-close title="Close">✕</button>
+      </span>
     </div>
     <div class="field-row">
       <div class="field">
@@ -1370,19 +1375,44 @@
 
   // ---------- theme toggle ----------
   const THEME_KEY = "gaming-records-theme";
-  const themeBtn = $("#themeBtn");
   const syncThemeBtn = () => {
     const dark = document.documentElement.dataset.theme !== "light";
-    themeBtn.textContent = dark ? "☀ Light" : "☾ Dark";
-    themeBtn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+    const title = dark ? "Switch to light mode" : "Switch to dark mode";
+    $("#themeBtn").textContent = dark ? "☀ Light" : "☾ Dark";
+    $("#themeBtn").title = title;
+    $("#themeBtnDialog").textContent = dark ? "☀" : "☾";
+    $("#themeBtnDialog").title = title;
   };
-  themeBtn.addEventListener("click", () => {
+  const toggleTheme = () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
     document.documentElement.dataset.theme = next;
     localStorage.setItem(THEME_KEY, next);
     syncThemeBtn();
-  });
+  };
+  $("#themeBtn").addEventListener("click", toggleTheme);
+  $("#themeBtnDialog").addEventListener("click", toggleTheme);
   syncThemeBtn();
+
+  // keyboard flow while logging: Enter = next round, Cmd/Ctrl+Enter = save
+  matchDialog.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      $("#matchForm").requestSubmit($("#matchSaveBtn"));
+      return;
+    }
+    const game = gameById($("#matchGame").value);
+    if (game && game.mode === "rounds" && e.target.tagName === "INPUT") {
+      e.preventDefault();
+      const last = pad.rounds[pad.rounds.length - 1];
+      if (last && last.every((v) => String(v).trim() === "")) {
+        // last round still untouched — jump there instead of stacking empties
+        padTable.querySelector(`[data-r="${pad.rounds.length - 1}"][data-c="0"]`)?.focus();
+      } else {
+        $("#addRoundBtn").click();
+      }
+    }
+  });
 
   // close buttons
   document.querySelectorAll("dialog [data-close]").forEach((b) =>
