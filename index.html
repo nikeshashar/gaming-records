@@ -30,6 +30,8 @@
     --amber-glow: rgba(255, 181, 46, 0.35);
     --red: #ff5d47;
     --teal: #4fd1a5;
+    --hot-bg: rgba(233, 60, 212, 0.22);
+    --hot-ink: #ff7ae0;
     --accent-fill: #ffb52e;
     --accent-ink: #221500;
     --accent-hover: #ffc45a;
@@ -57,6 +59,8 @@
     --amber-glow: rgba(156, 107, 0, 0.15);
     --red: #c23a24;
     --teal: #1d7d5b;
+    --hot-bg: rgba(210, 30, 190, 0.14);
+    --hot-ink: #a81092;
     --amber-shadow: rgba(0, 0, 0, 0.12);
     --grain-opacity: 0.35;
     --backdrop: rgba(62, 56, 36, 0.45);
@@ -419,6 +423,12 @@
   }
   .pad .ph input { accent-color: var(--amber); width: 13px; height: 13px; margin: 0; }
   .pad .ph:has(input:checked) { color: var(--amber); }
+  .pad tbody input.hot {
+    background: var(--hot-bg); color: var(--hot-ink);
+    font-weight: 700; border-radius: 6px;
+  }
+  .round-detail td.hot, .score-chip .pts.hot { color: var(--hot-ink); font-weight: 700; }
+  .round-detail td.hot { background: var(--hot-bg); }
   .pbadge {
     font-family: var(--mono); font-size: 0.66rem; font-weight: 600;
     color: var(--chalk-faint); border: 1px solid var(--line);
@@ -538,6 +548,11 @@
       <input type="number" id="gamePhases" placeholder="e.g. 10 for Phase 10" min="1">
       <div class="hint">Adds a per-round “phase done” tick for each player. Most phases wins; lowest score breaks ties.</div>
     </div>
+    <div class="field" id="highlightField" hidden>
+      <label for="gameHighlight">Highlight round scores from (optional)</label>
+      <input type="number" id="gameHighlight" placeholder="e.g. 12 for a Qwirkle" step="any">
+      <div class="hint">Round scores at or above this number light up on the pad and in history.</div>
+    </div>
     <div class="form-error" id="gameError"></div>
     <div class="dialog-actions">
       <button type="button" class="btn" data-close>Cancel</button>
@@ -642,9 +657,10 @@
       games: [
         { id: uid(), name: "Skyjo", emoji: "🃏", direction: "low", mode: "rounds", target: 100 },
         { id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 },
+        { id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12 },
       ],
       matches: [],
-      templates: { phase10: true },
+      templates: { phase10: true, qwirkle: true },
       updatedAt: 0,
     };
   };
@@ -664,6 +680,11 @@
     if (!state.templates.phase10) {
       state.games.push({ id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 });
       state.templates.phase10 = true;
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
+    if (!state.templates.qwirkle) {
+      state.games.push({ id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12 });
+      state.templates.qwirkle = true;
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
   };
@@ -908,7 +929,7 @@
             <thead><tr><th class="rn">Rnd</th>${m.players.map((p) => `<th>${esc(p)}</th>`).join("")}</tr></thead>
             <tbody>
               ${m.rounds.map((r, ri) => `
-                <tr><td class="rn">${ri + 1}</td>${m.players.map((_, pi) => `<td>${fmtScore(r[pi])}${counts && m.phased[ri]?.[pi] ? '<span class="pcheck"> ✓</span>' : ""}</td>`).join("")}</tr>`).join("")}
+                <tr><td class="rn">${ri + 1}</td>${m.players.map((_, pi) => `<td class="${game.highlight != null && r[pi] >= game.highlight ? "hot" : ""}">${fmtScore(r[pi])}${counts && m.phased[ri]?.[pi] ? '<span class="pcheck"> ✓</span>' : ""}</td>`).join("")}</tr>`).join("")}
               <tr class="totals"><td class="rn">Σ</td>${entries.map((e) => `
                 <td class="${winners.has(e.player) ? "win" : ""} ${isBust(game, e.score) ? "bust" : ""}">${fmtScore(e.score)}</td>`).join("")}</tr>
               ${counts ? `<tr class="totals"><td class="rn">Ph</td>${counts.map((c) => `<td>P${c}</td>`).join("")}</tr>` : ""}
@@ -957,6 +978,7 @@
     $("#modeSeg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.mode === gameMode));
     $("#targetField").hidden = gameMode !== "rounds";
     $("#phasesField").hidden = gameMode !== "rounds";
+    $("#highlightField").hidden = gameMode !== "rounds";
     $("#modeHint").hidden = gameMode !== "rounds";
   };
 
@@ -994,6 +1016,7 @@
     }
     const targetRaw = $("#gameTarget").value.trim();
     const phasesRaw = $("#gamePhases").value.trim();
+    const highlightRaw = $("#gameHighlight").value.trim();
     const game = {
       id: uid(), name,
       emoji: $("#gameEmoji").value.trim(),
@@ -1001,6 +1024,7 @@
       mode: gameMode,
       target: gameMode === "rounds" && targetRaw !== "" && !isNaN(Number(targetRaw)) ? Number(targetRaw) : null,
       phases: gameMode === "rounds" && phasesRaw !== "" && Number(phasesRaw) > 0 ? Math.round(Number(phasesRaw)) : null,
+      highlight: gameMode === "rounds" && highlightRaw !== "" && !isNaN(Number(highlightRaw)) ? Number(highlightRaw) : null,
     };
     state.games.push(game);
     selectedGameId = game.id;
@@ -1069,6 +1093,11 @@
       const pCount = pad.phased.reduce((s, r) => s + (r[pi] ? 1 : 0), 0);
       cell.textContent = fmtScore(total) + (game && game.phases ? ` · P${pCount}` : "");
       cell.classList.toggle("bust", !!game && isBust(game, total));
+    });
+    // light up big rounds (e.g. a 12+ Qwirkle)
+    const hot = game && game.highlight != null ? game.highlight : null;
+    padTable.querySelectorAll("tbody input[type=number]").forEach((inp) => {
+      inp.classList.toggle("hot", hot !== null && inp.value !== "" && Number(inp.value) >= hot);
     });
     renderStandings();
   }
