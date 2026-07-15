@@ -428,6 +428,18 @@
   .score-chip.winner .pbadge { color: var(--amber); border-color: var(--amber); }
   .pcheck { color: var(--amber); font-size: 0.7rem; }
 
+  /* live standings under the score pad */
+  #padStandings { margin-top: 14px; }
+  #padStandings label { margin-bottom: 7px; }
+  table.standings { font-size: 0.84rem; }
+  .standings th { padding: 7px 10px; }
+  .standings td { padding: 7px 10px; font-family: var(--mono); color: var(--chalk-dim); border-bottom: 1px solid var(--line-soft); }
+  .standings tr:last-child td { border-bottom: none; }
+  .standings td.nm { font-family: var(--sans); font-weight: 600; color: var(--chalk); }
+  .standings td.rk { width: 36px; text-align: center; }
+  .standings tr.lead td { background: rgba(255, 181, 46, 0.07); color: var(--amber); }
+  .standings tr.lead td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+
   .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
   .form-error { color: var(--red); font-size: 0.82rem; margin-top: 12px; display: none; }
   .form-error.show { display: block; }
@@ -564,6 +576,7 @@
         <button type="button" class="btn btn-ghost btn-sm" id="addRoundBtn">+ Add round</button>
         <button type="button" class="btn btn-ghost btn-sm" id="addPlayerBtn">+ Add player</button>
       </div>
+      <div id="padStandings"></div>
     </div>
 
     <div class="field">
@@ -1057,11 +1070,50 @@
       cell.textContent = fmtScore(total) + (game && game.phases ? ` · P${pCount}` : "");
       cell.classList.toggle("bust", !!game && isBust(game, total));
     });
+    renderStandings();
+  }
+
+  // live "who's winning" table under the pad: phase reached first, then total score
+  function renderStandings() {
+    const wrap = $("#padStandings");
+    const game = gameById($("#matchGame").value);
+    if (!game || game.mode !== "rounds") { wrap.innerHTML = ""; return; }
+    const rows = pad.players
+      .map((p, i) => ({
+        name: p.trim(),
+        total: pad.rounds.reduce((s, r) => s + (Number(r[i]) || 0), 0),
+        ph: pad.phased.reduce((s, r) => s + (r[i] ? 1 : 0), 0),
+      }))
+      .filter((r) => r.name);
+    if (rows.length < 2) { wrap.innerHTML = ""; return; }
+    const dir = game.direction === "low" ? 1 : -1;
+    rows.sort((a, b) =>
+      (game.phases ? b.ph - a.ph : 0) || dir * (a.total - b.total) || a.name.localeCompare(b.name));
+    let rank = 0, prev = null;
+    rows.forEach((r, idx) => {
+      if (!prev || r.ph !== prev.ph || r.total !== prev.total) rank = idx + 1;
+      r.rank = rank; prev = r;
+    });
+    wrap.innerHTML = `
+      <label>Current standings</label>
+      <div class="pad-scroll">
+        <table class="standings">
+          <tbody>
+            ${rows.map((r) => `
+              <tr class="${r.rank === 1 ? "lead" : ""}">
+                <td class="rk">${r.rank === 1 ? "👑" : r.rank}</td>
+                <td class="nm">${esc(r.name)}</td>
+                ${game.phases ? `<td>${r.ph >= game.phases ? "🏁 done" : "on phase " + (r.ph + 1)}</td>` : ""}
+                <td class="num">${fmtScore(r.total)} pts</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
   }
 
   padTable.addEventListener("input", (e) => {
     const t = e.target;
-    if (t.dataset.p !== undefined) pad.players[Number(t.dataset.p)] = t.value;
+    if (t.dataset.p !== undefined) { pad.players[Number(t.dataset.p)] = t.value; renderStandings(); }
     if (t.dataset.r !== undefined) {
       pad.rounds[Number(t.dataset.r)][Number(t.dataset.c)] = t.value;
       updatePadTotals();
