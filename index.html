@@ -636,10 +636,6 @@
       </div>
     </div>
 
-    <div class="field">
-      <label for="matchNote">Note <span style="text-transform:none;letter-spacing:0;opacity:0.7">(optional)</span></label>
-      <input type="text" id="matchNote" placeholder="Comeback of the century…">
-    </div>
     <div class="form-error" id="matchError"></div>
     <div class="dialog-actions">
       <button type="button" class="btn" data-close>Cancel</button>
@@ -1281,7 +1277,6 @@
       `<option value="${g.id}" ${g.id === gameId ? "selected" : ""}>${esc(g.emoji ? g.emoji + " " : "")}${esc(g.name)}</option>`).join("");
     $("#matchGame").disabled = !!match;
     $("#matchDate").value = match ? match.date : todayISO();
-    $("#matchNote").value = match ? (match.note || "") : "";
     initEntryArea(gameById(gameId), match);
     $("#matchError").classList.remove("show");
     matchDialog.showModal();
@@ -1352,11 +1347,11 @@
     }
 
     matchData.date = $("#matchDate").value || todayISO();
-    matchData.note = $("#matchNote").value.trim();
 
     if (editingId) {
       const idx = state.matches.findIndex((m) => m.id === editingId);
-      state.matches[idx] = { ...matchData, id: editingId, createdAt: state.matches[idx].createdAt };
+      // keep any note from before the field was removed
+      state.matches[idx] = { ...matchData, id: editingId, createdAt: state.matches[idx].createdAt, note: state.matches[idx].note };
     } else {
       state.matches.push({ ...matchData, id: uid(), createdAt: Date.now() });
     }
