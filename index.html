@@ -475,6 +475,35 @@
   .score-chip.winner .pbadge { color: var(--amber); border-color: var(--amber); }
   .pcheck { color: var(--amber); font-size: 0.7rem; }
 
+  /* barbu: selects + round check inside the pad, contracts matrix */
+  .pad select {
+    border: none; background: transparent;
+    color: var(--chalk); font-family: var(--sans); font-size: 0.85rem;
+    padding: 8px 4px; width: 100%; min-width: 92px;
+  }
+  .pad select:focus { outline: none; box-shadow: inset 0 0 0 1px var(--amber); border-radius: 6px; }
+  .pad th.scol {
+    font-family: var(--mono); font-weight: 600; font-size: 0.66rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--chalk-faint); text-align: left; padding: 6px 8px;
+  }
+  td.bsum {
+    font-family: var(--mono); font-size: 0.76rem; text-align: center;
+    white-space: nowrap; padding: 4px 8px; color: var(--chalk-faint); min-width: 96px;
+  }
+  td.bsum.ok { color: var(--teal); }
+  td.bsum.bad { color: var(--red); }
+  .bmatrix-label {
+    display: block; font-family: var(--mono); font-size: 0.68rem;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--chalk-faint); margin: 14px 0 7px;
+  }
+  .bmatrix th {
+    font-size: 0.62rem; letter-spacing: 0.06em; text-align: center; padding: 7px 6px;
+  }
+  .bmatrix td.ck { text-align: center; }
+  .bmatrix-wrap { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--felt-900); }
+
   /* live standings above the score pad */
   #padStandings:not(:empty) { margin-bottom: 18px; }
   #padStandings label { margin-bottom: 7px; }
@@ -696,9 +725,10 @@
         { id: uid(), name: "Skyjo", emoji: "🃏", direction: "low", mode: "rounds", target: 100 },
         { id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 },
         { id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12 },
+        { id: uid(), name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null },
       ],
       matches: [],
-      templates: { phase10: true, qwirkle: true },
+      templates: { phase10: true, qwirkle: true, barbu: true },
       updatedAt: 0,
     };
   };
@@ -725,6 +755,11 @@
       state.templates.qwirkle = true;
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
+    if (!state.templates.barbu) {
+      state.games.push({ id: uid(), name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null });
+      state.templates.barbu = true;
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
   };
 
   // ---------- helpers ----------
@@ -747,6 +782,29 @@
   // Normalize both match shapes to [{player, score}] — rounds matches sum their rounds.
   const matchEntries = (m) =>
     m.entries ?? m.players.map((p, i) => ({ player: p, score: m.rounds.reduce((s, r) => s + (r[i] || 0), 0) }));
+
+  // Barbu: seven contracts, each declarable once per player; every contract has a
+  // fixed table total the round's scores must sum to (the score-sheet check).
+  const BARBU_CONTRACTS = [
+    { key: "tricks", name: "No Tricks", short: "Tricks", total: -26 },
+    { key: "hearts", name: "No Hearts", short: "Hearts", total: -30 },
+    { key: "queens", name: "No Queens", short: "Queens", total: -24 },
+    { key: "last2", name: "No Last Two", short: "Last 2", total: -30 },
+    { key: "barbu", name: "Barbu (K♥)", short: "Barbu", total: -20 },
+    { key: "trumps", name: "Trumps", short: "Trumps", total: 65 },
+    { key: "domino", name: "Dominoes", short: "Domino", total: 65 },
+  ];
+  const barbuContract = (key) => BARBU_CONTRACTS.find((c) => c.key === key);
+  const barbuMatrixHTML = (players, meta) => `
+    <div class="table-wrap bmatrix-wrap">
+      <table class="standings bmatrix">
+        <thead><tr><th></th>${BARBU_CONTRACTS.map((c) => `<th>${c.short}</th>`).join("")}</tr></thead>
+        <tbody>${players.map((p, i) => `
+          <tr><td class="nm">${esc(String(p).trim() || `Player ${i + 1}`)}</td>${BARBU_CONTRACTS.map((c) =>
+            `<td class="ck">${meta.some((r) => r.declarer === i && r.contract === c.key) ? '<span class="pcheck">✓</span>' : ""}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
 
   const phaseCounts = (m) => m.players.map((_, i) => (m.phased || []).reduce((s, r) => s + (r[i] ? 1 : 0), 0));
 
@@ -960,7 +1018,25 @@
     const roundsBtn = m.rounds
       ? `<button class="exp" data-exp="${m.id}">▸ ${m.rounds.length} round${m.rounds.length === 1 ? "" : "s"}</button>`
       : "";
-    const detail = m.rounds ? `
+    const detail = m.barbu ? `
+      <div class="round-detail" data-detail="${m.id}" hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th class="rn">Rnd</th><th>Dealer</th><th>Declarer</th><th>Contract</th>${m.players.map((p) => `<th>${esc(p)}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${m.rounds.map((r, ri) => {
+                const b = m.barbu[ri];
+                const c = barbuContract(b.contract);
+                return `<tr><td class="rn">${ri + 1}</td><td>${esc(m.players[b.dealer] ?? "?")}</td><td>${esc(m.players[b.declarer] ?? "?")}</td><td>${c ? c.name : esc(b.contract)}</td>${m.players.map((_, pi) => `<td>${fmtScore(r[pi])}</td>`).join("")}</tr>`;
+              }).join("")}
+              <tr class="totals"><td class="rn">Σ</td><td colspan="3"></td>${entries.map((en) => `
+                <td class="${winners.has(en.player) ? "win" : ""}">${fmtScore(en.score)}</td>`).join("")}</tr>
+            </tbody>
+          </table>
+        </div>
+        <label class="bmatrix-label">Contracts declared</label>
+        ${barbuMatrixHTML(m.players, m.barbu)}
+      </div>` : m.rounds ? `
       <div class="round-detail" data-detail="${m.id}" hidden>
         <div class="table-wrap">
           <table>
@@ -1099,10 +1175,11 @@
   $("#addEntryBtn").addEventListener("click", () => addEntryRow());
 
   // --- rounds score pad (model + render) ---
-  let pad = { players: [], rounds: [], phased: [] };
+  let pad = { mode: "rounds", players: [], rounds: [], phased: [], brounds: [] };
   const padTable = $("#padTable");
 
   function renderPad() {
+    if (pad.mode === "barbu") { renderBarbuPad(); return; }
     const game = gameById($("#matchGame").value);
     const phases = !!(game && game.phases);
     padTable.innerHTML = `
@@ -1150,16 +1227,88 @@
     renderStandings();
   }
 
-  // live "who's winning" table under the pad: phase reached first, then total score
+  // ---- Barbu score pad: dealer/declarer/contract per round + fixed-total check ----
+  function renderBarbuPad() {
+    const pname = (i) => pad.players[i].trim() || `Player ${i + 1}`;
+    const playerOpts = (sel) => pad.players.map((_, i) =>
+      `<option value="${i}" data-popt="${i}" ${sel === i ? "selected" : ""}>${esc(pname(i))}</option>`).join("");
+    const contractOpts = (r) => {
+      const taken = new Set(pad.brounds.filter((x) => x !== r && x.declarer === r.declarer && x.contract).map((x) => x.contract));
+      return `<option value="">contract…</option>` + BARBU_CONTRACTS
+        .filter((c) => !taken.has(c.key) || c.key === r.contract)
+        .map((c) => `<option value="${c.key}" ${r.contract === c.key ? "selected" : ""}>${c.name} (${c.total > 0 ? "+" : ""}${c.total})</option>`).join("");
+    };
+    padTable.innerHTML = `
+      <thead><tr>
+        <th class="corner">Rnd</th>
+        <th class="scol">Dealer</th><th class="scol">Declarer</th><th class="scol">Contract</th>
+        ${pad.players.map((p, i) => `<th class="pcol"><span class="colhead">
+          <input type="text" placeholder="Player ${i + 1}" list="playerList" data-p="${i}" value="${esc(p)}"></span></th>`).join("")}
+        <th class="corner">Check</th>
+      </tr></thead>
+      <tbody>
+        ${pad.brounds.map((r, ri) => `
+          <tr>
+            <td class="rn">${ri + 1}${pad.brounds.length > 1 ? ` <button type="button" class="rm-row" data-rmrow="${ri}" title="Remove round">✕</button>` : ""}</td>
+            <td><select data-bdealer="${ri}">${playerOpts(r.dealer)}</select></td>
+            <td><select data-bdeclarer="${ri}">${playerOpts(r.declarer)}</select></td>
+            <td><select data-bcontract="${ri}">${contractOpts(r)}</select></td>
+            ${pad.players.map((_, pi) => `<td><input type="number" step="any" inputmode="numeric" data-br="${ri}" data-bc="${pi}" value="${esc(r.scores[pi] ?? "")}"></td>`).join("")}
+            <td class="bsum" data-bsum="${ri}"></td>
+          </tr>`).join("")}
+      </tbody>
+      <tfoot><tr>
+        <td class="sig" colspan="4">Σ</td>
+        ${pad.players.map((_, pi) => `<td data-tot="${pi}">0</td>`).join("")}
+        <td></td>
+      </tr></tfoot>`;
+    syncAddPlayerBtns();
+    updateBarbuTotals();
+  }
+
+  function updateBarbuTotals() {
+    pad.players.forEach((_, pi) => {
+      const total = pad.brounds.reduce((s, r) => s + (Number(r.scores[pi]) || 0), 0);
+      const cell = padTable.querySelector(`[data-tot="${pi}"]`);
+      if (cell) cell.textContent = fmtScore(total);
+    });
+    pad.brounds.forEach((r, ri) => {
+      const cell = padTable.querySelector(`[data-bsum="${ri}"]`);
+      if (!cell) return;
+      const c = barbuContract(r.contract);
+      if (!c) { cell.textContent = "—"; cell.className = "bsum"; return; }
+      const sum = r.scores.reduce((s, v) => s + (Number(v) || 0), 0);
+      const ok = sum === c.total;
+      cell.textContent = `${fmtScore(sum)} / ${fmtScore(c.total)} ${ok ? "✓" : "✗"}`;
+      cell.className = "bsum " + (ok ? "ok" : "bad");
+    });
+    renderStandings();
+  }
+
+  padTable.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.bdealer !== undefined) pad.brounds[Number(t.dataset.bdealer)].dealer = Number(t.value);
+    if (t.dataset.bdeclarer !== undefined) {
+      pad.brounds[Number(t.dataset.bdeclarer)].declarer = Number(t.value);
+      renderBarbuPad(); // contract availability depends on the declarer
+    }
+    if (t.dataset.bcontract !== undefined) {
+      pad.brounds[Number(t.dataset.bcontract)].contract = t.value;
+      renderBarbuPad(); // refilter other rows + update this row's target
+    }
+  });
+
+  // live "who's winning" table above the pad: phase reached first, then total score
   function renderStandings() {
     const wrap = $("#padStandings");
     const game = gameById($("#matchGame").value);
-    if (!game || game.mode !== "rounds") { wrap.innerHTML = ""; return; }
+    if (!game || game.mode === "single") { wrap.innerHTML = ""; return; }
     const rows = pad.players
       .map((p, i) => ({
         name: p.trim(),
-        total: pad.rounds.reduce((s, r) => s + (Number(r[i]) || 0), 0),
-        ph: pad.phased.reduce((s, r) => s + (r[i] ? 1 : 0), 0),
+        total: (pad.mode === "barbu" ? pad.brounds.map((r) => r.scores) : pad.rounds)
+          .reduce((s, r) => s + (Number(r[i]) || 0), 0),
+        ph: pad.mode === "barbu" ? 0 : pad.phased.reduce((s, r) => s + (r[i] ? 1 : 0), 0),
       }))
       .filter((r) => r.name);
     if (rows.length < 2) { wrap.innerHTML = ""; return; }
@@ -1185,12 +1334,19 @@
               </tr>`).join("")}
           </tbody>
         </table>
-      </div>`;
+      </div>
+      ${pad.mode === "barbu" ? `<label class="bmatrix-label">Contracts declared</label>${barbuMatrixHTML(pad.players, pad.brounds)}` : ""}`;
   }
 
   padTable.addEventListener("input", (e) => {
     const t = e.target;
-    if (t.dataset.p !== undefined) { pad.players[Number(t.dataset.p)] = t.value; renderStandings(); }
+    if (t.dataset.p !== undefined) {
+      const i = Number(t.dataset.p);
+      pad.players[i] = t.value;
+      if (pad.mode === "barbu") // keep dealer/declarer dropdown labels in sync without re-rendering
+        padTable.querySelectorAll(`option[data-popt="${i}"]`).forEach((o) => { o.textContent = t.value.trim() || `Player ${i + 1}`; });
+      renderStandings();
+    }
     if (t.dataset.r !== undefined) {
       pad.rounds[Number(t.dataset.r)][Number(t.dataset.c)] = t.value;
       updatePadTotals();
@@ -1198,6 +1354,10 @@
     if (t.dataset.pr !== undefined) {
       pad.phased[Number(t.dataset.pr)][Number(t.dataset.pc)] = t.checked;
       updatePadTotals();
+    }
+    if (t.dataset.br !== undefined) {
+      pad.brounds[Number(t.dataset.br)].scores[Number(t.dataset.bc)] = t.value;
+      updateBarbuTotals();
     }
   });
   padTable.addEventListener("click", (e) => {
@@ -1212,13 +1372,24 @@
     }
     const rr = e.target.closest("[data-rmrow]");
     if (rr) {
-      pad.rounds.splice(Number(rr.dataset.rmrow), 1);
-      pad.phased.splice(Number(rr.dataset.rmrow), 1);
+      if (pad.mode === "barbu") pad.brounds.splice(Number(rr.dataset.rmrow), 1);
+      else {
+        pad.rounds.splice(Number(rr.dataset.rmrow), 1);
+        pad.phased.splice(Number(rr.dataset.rmrow), 1);
+      }
       renderPad();
     }
   });
 
   $("#addRoundBtn").addEventListener("click", () => {
+    if (pad.mode === "barbu") {
+      const last = pad.brounds[pad.brounds.length - 1];
+      const dealer = last ? (last.dealer + 1) % 4 : 0; // deal rotates clockwise
+      pad.brounds.push({ dealer, declarer: dealer, contract: "", scores: ["", "", "", ""] });
+      renderPad();
+      padTable.querySelector(`[data-bcontract="${pad.brounds.length - 1}"]`)?.focus();
+      return;
+    }
     pad.rounds.push(pad.players.map(() => ""));
     pad.phased.push(pad.players.map(() => false));
     renderPad();
@@ -1235,23 +1406,38 @@
 
   // --- dialog open / mode switch ---
   function setEntryMode(game) {
-    const rounds = game.mode === "rounds";
-    $("#singleEntry").hidden = rounds;
-    $("#padEntry").hidden = !rounds;
+    const usesPad = game.mode !== "single";
+    $("#singleEntry").hidden = usesPad;
+    $("#padEntry").hidden = !usesPad;
+    $("#addPlayerBtn").style.display = game.mode === "barbu" ? "none" : ""; // Barbu is fixed at 4
   }
 
   function initEntryArea(game, match = null) {
-    if (game.mode === "rounds") {
+    if (game.mode === "barbu") {
       if (match) {
         pad = {
+          mode: "barbu",
+          players: [...match.players],
+          brounds: match.rounds.map((scores, i) => ({ ...match.barbu[i], scores: scores.map(String) })),
+        };
+      } else {
+        const recent = matchesFor(game.id).find((m) => m.barbu);
+        const players = recent ? [...recent.players] : ["", "", "", ""];
+        pad = { mode: "barbu", players, brounds: [{ dealer: 0, declarer: 0, contract: "", scores: ["", "", "", ""] }] };
+      }
+      renderPad();
+    } else if (game.mode === "rounds") {
+      if (match) {
+        pad = {
+          mode: "rounds",
           players: [...match.players],
           rounds: match.rounds.map((r) => [...r]),
           phased: match.phased ? match.phased.map((r) => [...r]) : match.rounds.map((r) => r.map(() => false)),
         };
       } else {
-        const recent = matchesFor(game.id).find((m) => m.rounds);
+        const recent = matchesFor(game.id).find((m) => m.rounds && !m.barbu);
         const players = recent ? [...recent.players] : ["", "", "", ""];
-        pad = { players, rounds: [players.map(() => "")], phased: [players.map(() => false)] };
+        pad = { mode: "rounds", players, rounds: [players.map(() => "")], phased: [players.map(() => false)] };
       }
       renderPad();
     } else {
@@ -1301,7 +1487,42 @@
     const game = gameById($("#matchGame").value);
     let matchData;
 
-    if (game.mode === "rounds") {
+    if (game.mode === "barbu") {
+      const players = pad.players.map((p) => p.trim());
+      if (players.some((p) => !p)) return fail(e, "Barbu needs all four player names.");
+      const seen = new Set();
+      for (const p of players) {
+        if (seen.has(p.toLowerCase())) return fail(e, `"${p}" appears twice.`);
+        seen.add(p.toLowerCase());
+      }
+      if (pad.brounds.length < 1) return fail(e, "Add at least one round.");
+      const declared = new Set();
+      const mismatches = [];
+      for (let ri = 0; ri < pad.brounds.length; ri++) {
+        const r = pad.brounds[ri];
+        const c = barbuContract(r.contract);
+        if (!c) return fail(e, `Round ${ri + 1}: pick a contract.`);
+        const key = r.declarer + ":" + r.contract;
+        if (declared.has(key)) return fail(e, `Round ${ri + 1}: ${players[r.declarer]} already declared ${c.name}.`);
+        declared.add(key);
+        for (let pi = 0; pi < 4; pi++) {
+          const v = String(r.scores[pi]).trim();
+          if (v === "" || isNaN(Number(v))) return fail(e, `Round ${ri + 1}: every player needs a numeric score.`);
+        }
+        const sum = r.scores.reduce((s, v) => s + Number(v), 0);
+        if (sum !== c.total) mismatches.push(`Round ${ri + 1} (${c.name}) sums to ${sum}, expected ${c.total}.`);
+      }
+      if (mismatches.length && !confirm(`Score check failed:\n\n${mismatches.join("\n")}\n\nSave anyway?`)) {
+        e.preventDefault();
+        return;
+      }
+      matchData = {
+        gameId: game.id,
+        players,
+        rounds: pad.brounds.map((r) => r.scores.map(Number)),
+        barbu: pad.brounds.map((r) => ({ dealer: r.dealer, declarer: r.declarer, contract: r.contract })),
+      };
+    } else if (game.mode === "rounds") {
       // ignore columns that are completely unused (no name, no scores)
       const keep = pad.players.map((p, i) =>
         p.trim() !== "" || pad.rounds.some((r) => String(r[i] ?? "").trim() !== ""));
@@ -1388,8 +1609,17 @@
       return;
     }
     const game = gameById($("#matchGame").value);
-    if (game && game.mode === "rounds" && e.target.tagName === "INPUT") {
+    if (game && game.mode !== "single" && e.target.tagName === "INPUT") {
       e.preventDefault();
+      if (pad.mode === "barbu") {
+        const last = pad.brounds[pad.brounds.length - 1];
+        if (last && !last.contract && last.scores.every((v) => String(v).trim() === "")) {
+          padTable.querySelector(`[data-bcontract="${pad.brounds.length - 1}"]`)?.focus();
+        } else {
+          $("#addRoundBtn").click();
+        }
+        return;
+      }
       const last = pad.rounds[pad.rounds.length - 1];
       if (last && last.every((v) => String(v).trim() === "")) {
         // last round still untouched — jump there instead of stacking empties
