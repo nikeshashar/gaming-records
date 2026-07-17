@@ -849,7 +849,7 @@
   </div>
   <div id="syncConnected" hidden>
     <p class="sync-copy" id="syncInfo"></p>
-    <p class="sync-copy">Scores push automatically after every change and pull whenever you open or return to the app. If two devices edit at the same time, the most recent save wins.</p>
+    <p class="sync-copy">Devices <strong>merge</strong> rather than overwrite: every game and match has its own ID, so scores logged on different devices all survive — deletions stick too. Syncs run after every change, whenever you return to the app, and automatically every 5 minutes.</p>
     <div class="form-error" id="syncError2"></div>
     <div class="dialog-actions">
       <button type="button" class="btn btn-danger" id="syncDisconnectBtn">Disconnect</button>
@@ -867,15 +867,26 @@
 
   // ---------- state ----------
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+  // every game and match carries its own id + updatedAt so devices can merge
+  const normalizeState = (d) => {
+    d.updatedAt = d.updatedAt || 0;
+    d.deleted = d.deleted || {}; // tombstones: { entityId: deletedAtMs }
+    d.templates = d.templates || {};
+    d.games.forEach((g) => { g.updatedAt = g.updatedAt || d.updatedAt; });
+    d.matches.forEach((m) => { m.updatedAt = m.updatedAt || m.createdAt || d.updatedAt; });
+    return d;
+  };
+
   const load = () => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (Array.isArray(d.games) && Array.isArray(d.matches)) { d.updatedAt = d.updatedAt || 0; return d; }
+        if (Array.isArray(d.games) && Array.isArray(d.matches)) return normalizeState(d);
       }
     } catch (e) { /* corrupted -> start fresh */ }
-    return {
+    return normalizeState({
       games: [
         { id: uid(), name: "Skyjo", emoji: "🃏", direction: "low", mode: "rounds", target: 100 },
         { id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 },
@@ -885,7 +896,7 @@
       matches: [],
       templates: { phase10: true, qwirkle: true, barbu: true },
       updatedAt: 0,
-    };
+    });
   };
   let state = load();
   let selectedGameId = state.games[0]?.id ?? null;
@@ -901,17 +912,17 @@
   const ensureTemplates = () => {
     state.templates = state.templates || {};
     if (!state.templates.phase10) {
-      state.games.push({ id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 });
+      state.games.push({ id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10, updatedAt: Date.now() });
       state.templates.phase10 = true;
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
     if (!state.templates.qwirkle) {
-      state.games.push({ id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12 });
+      state.games.push({ id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12, updatedAt: Date.now() });
       state.templates.qwirkle = true;
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
     if (!state.templates.barbu) {
-      state.games.push({ id: uid(), name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null });
+      state.games.push({ id: uid(), name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null, updatedAt: Date.now() });
       state.templates.barbu = true;
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
@@ -1143,6 +1154,7 @@
     view.querySelectorAll("[data-del]").forEach((el) =>
       el.addEventListener("click", () => {
         if (!confirm("Delete this match?")) return;
+        state.deleted[el.dataset.del] = Date.now(); // tombstone so it can't sync back
         state.matches = state.matches.filter((m) => m.id !== el.dataset.del);
         save(); render();
       }));
@@ -1227,6 +1239,9 @@
     const g = gameById(id);
     const n = matchesFor(id).length;
     if (!confirm(`Delete "${g.name}"${n ? ` and its ${n} match${n === 1 ? "" : "es"}` : ""}? This can't be undone.`)) return;
+    const now = Date.now();
+    state.deleted[id] = now;
+    state.matches.filter((m) => m.gameId === id).forEach((m) => { state.deleted[m.id] = now; });
     state.games = state.games.filter((x) => x.id !== id);
     state.matches = state.matches.filter((m) => m.gameId !== id);
     selectedGameId = state.games[0]?.id ?? null;
@@ -1288,6 +1303,7 @@
     const highlightRaw = $("#gameHighlight").value.trim();
     const game = {
       id: uid(), name,
+      updatedAt: Date.now(),
       emoji: $("#gameEmoji").value.trim(),
       direction: gameDir,
       mode: gameMode,
@@ -1724,6 +1740,7 @@
     }
 
     matchData.date = $("#matchDate").value || todayISO();
+    matchData.updatedAt = Date.now();
 
     if (editingId) {
       const idx = state.matches.findIndex((m) => m.id === editingId);
@@ -1809,7 +1826,7 @@
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.games) || !Array.isArray(d.matches)) throw new Error("bad shape");
       if (!confirm(`Import ${d.games.length} games and ${d.matches.length} matches? This replaces current data.`)) return;
-      state = d;
+      state = normalizeState(d);
       selectedGameId = state.games[0]?.id ?? null;
       save(); render();
     } catch {
@@ -1856,48 +1873,74 @@
   function schedulePush() {
     if (!sync) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(pushNow, 1200);
+    pushTimer = setTimeout(syncNow, 1200);
   }
 
-  async function pushNow() {
+  // Merge two states entity-by-entity: every game/match has a unique id, the
+  // newer updatedAt wins per entity, and tombstones stop deletions syncing back.
+  function mergeStates(a, b) {
+    const deleted = {};
+    [...Object.keys(a.deleted || {}), ...Object.keys(b.deleted || {})].forEach((id) => {
+      deleted[id] = Math.max(a.deleted?.[id] || 0, b.deleted?.[id] || 0);
+    });
+    const mergeList = (la, lb) => {
+      const m = new Map();
+      [...la, ...lb].forEach((e) => {
+        const cur = m.get(e.id);
+        if (!cur || (e.updatedAt || 0) > (cur.updatedAt || 0)) m.set(e.id, e);
+      });
+      return [...m.values()].filter((e) => !(deleted[e.id] && deleted[e.id] >= (e.updatedAt || 0)));
+    };
+    return {
+      games: mergeList(a.games, b.games),
+      matches: mergeList(a.matches, b.matches),
+      templates: { ...(a.templates || {}), ...(b.templates || {}) },
+      deleted,
+      updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
+    };
+  }
+
+  // One sync = fetch remote, merge with local, adopt the merge, and push it
+  // back if the gist doesn't have it yet. Nothing is ever overwritten blindly.
+  async function syncNow() {
     if (!sync) return;
     if (pushing) { pushQueued = true; return; }
     pushing = true;
     setSyncStatus("syncing");
     try {
-      await api("/gists/" + sync.gistId, {
-        method: "PATCH",
-        body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(state) } } }),
-      });
-      setSyncStatus("ok");
-    } catch (err) {
-      setSyncStatus(navigator.onLine === false ? "offline" : "error", "Push failed: " + err.message);
-    } finally {
-      pushing = false;
-      if (pushQueued) { pushQueued = false; pushNow(); }
-    }
-  }
-
-  async function pullNow() {
-    if (!sync) return;
-    setSyncStatus("syncing");
-    try {
       const g = await api("/gists/" + sync.gistId);
       const f = g.files[GIST_FILE];
-      if (!f) throw new Error("data file missing from gist");
-      const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
-      const remote = JSON.parse(text);
-      if (Array.isArray(remote.games) && Array.isArray(remote.matches) &&
-          (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-        state = remote;
-        localStorage.setItem(STORE_KEY, JSON.stringify(state));
-        ensureTemplates();
-        if (!gameById(selectedGameId)) selectedGameId = state.games[0]?.id ?? null;
-        render();
+      let remote = null;
+      if (f) {
+        const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed.games) && Array.isArray(parsed.matches)) remote = normalizeState(parsed);
+        } catch { /* unreadable remote -> treat as absent, ours becomes truth */ }
+      }
+      const remoteJson = remote ? JSON.stringify(remote) : null;
+      if (remote) {
+        const merged = mergeStates(state, remote);
+        if (JSON.stringify(merged) !== JSON.stringify(state)) {
+          state = merged;
+          localStorage.setItem(STORE_KEY, JSON.stringify(state));
+          ensureTemplates();
+          if (!gameById(selectedGameId)) selectedGameId = state.games[0]?.id ?? null;
+          render();
+        }
+      }
+      if (JSON.stringify(state) !== remoteJson) {
+        await api("/gists/" + sync.gistId, {
+          method: "PATCH",
+          body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(state) } } }),
+        });
       }
       setSyncStatus("ok");
     } catch (err) {
-      setSyncStatus(navigator.onLine === false ? "offline" : "error", "Pull failed: " + err.message);
+      setSyncStatus(navigator.onLine === false ? "offline" : "error", "Sync failed: " + err.message);
+    } finally {
+      pushing = false;
+      if (pushQueued) { pushQueued = false; syncNow(); }
     }
   }
 
@@ -1919,8 +1962,7 @@
       sync.gistId = created.id;
     }
     localStorage.setItem(SYNC_KEY, JSON.stringify(sync));
-    await pullNow();   // adopt the other device's data if it's newer
-    await pushNow();   // otherwise publish ours
+    await syncNow();   // merge with whatever the gist already holds
   }
 
   // --- sync dialog wiring ---
@@ -1972,18 +2014,19 @@
   });
 
   $("#syncNowBtn").addEventListener("click", async () => {
-    await pullNow();
-    await pushNow();
+    await syncNow();
     openSyncDialog(); // refresh status/error text
   });
 
-  // pull when returning to the app (phone -> laptop -> phone)
-  document.addEventListener("visibilitychange", () => { if (sync && !document.hidden) pullNow(); });
-  window.addEventListener("online", () => { if (sync) { pullNow(); schedulePush(); } });
+  // sync when returning to the app (phone -> laptop -> phone)
+  document.addEventListener("visibilitychange", () => { if (sync && !document.hidden) syncNow(); });
+  window.addEventListener("online", () => { if (sync) syncNow(); });
+  // and automatically every 5 minutes
+  setInterval(() => { if (sync) syncNow(); }, 5 * 60 * 1000);
 
   ensureTemplates();
   render();
-  if (sync) pullNow(); else setSyncStatus("off");
+  if (sync) syncNow(); else setSyncStatus("off");
 })();
 </script>
 </body>
