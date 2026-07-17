@@ -906,26 +906,25 @@
     schedulePush();
   };
 
-  // One-time game templates for data created before they existed. No updatedAt bump:
-  // the addition syncs with the next real save, so it can never clobber newer remote data.
-  // The flag survives deletion — deleting Phase 10 won't resurrect it.
+  // Game templates: games are protected (not deletable), so any template
+  // missing by name is re-added — restores games lost to the old delete button.
+  // No updatedAt bump: the addition syncs with the next real save.
   const ensureTemplates = () => {
     state.templates = state.templates || {};
-    if (!state.templates.phase10) {
-      state.games.push({ id: uid(), name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10, updatedAt: Date.now() });
-      state.templates.phase10 = true;
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    }
-    if (!state.templates.qwirkle) {
-      state.games.push({ id: uid(), name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12, updatedAt: Date.now() });
-      state.templates.qwirkle = true;
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    }
-    if (!state.templates.barbu) {
-      state.games.push({ id: uid(), name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null, updatedAt: Date.now() });
-      state.templates.barbu = true;
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    }
+    const have = new Set(state.games.map((g) => String(g.name).trim().toLowerCase()));
+    let added = false;
+    [
+      { name: "Skyjo", emoji: "🃏", direction: "low", mode: "rounds", target: 100 },
+      { name: "Phase 10", emoji: "🔟", direction: "low", mode: "rounds", target: null, phases: 10 },
+      { name: "Qwirkle", emoji: "🟪", direction: "high", mode: "rounds", target: null, highlight: 12 },
+      { name: "Barbu", emoji: "♥️", direction: "high", mode: "barbu", target: null },
+    ].forEach((t) => {
+      if (!have.has(t.name.toLowerCase())) {
+        state.games.push({ id: uid(), updatedAt: Date.now(), ...t });
+        added = true;
+      }
+    });
+    if (added) localStorage.setItem(STORE_KEY, JSON.stringify(state));
   };
 
   // ---------- helpers ----------
@@ -1078,13 +1077,9 @@
         <div class="panel fade-in">
           <div class="panel-head">
             <div class="panel-title">${esc(game.emoji || "🎲")} ${esc(game.name)}</div>
-            <div>
-              <button class="btn btn-sm btn-danger" id="deleteGameBtn">Delete game</button>
-            </div>
           </div>
           <div class="empty-sub">No matches yet — hit <strong style="color: var(--amber)">+ Log Match</strong> after your next game of ${esc(game.name)}.</div>
         </div>`;
-      $("#deleteGameBtn").addEventListener("click", () => deleteGame(game.id));
       return;
     }
 
@@ -1120,7 +1115,6 @@
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">Leaderboard <span class="em">·</span> ${esc(game.name)}</div>
-            <button class="btn btn-sm btn-danger" id="deleteGameBtn">Delete game</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -1150,7 +1144,6 @@
         </div>
       </div>`;
 
-    $("#deleteGameBtn").addEventListener("click", () => deleteGame(game.id));
     view.querySelectorAll("[data-del]").forEach((el) =>
       el.addEventListener("click", () => {
         if (!confirm("Delete this match?")) return;
@@ -1233,19 +1226,6 @@
         ${m.note ? `<span class="note">“${esc(m.note)}”</span>` : ""}
         ${detail}
       </div>`;
-  }
-
-  function deleteGame(id) {
-    const g = gameById(id);
-    const n = matchesFor(id).length;
-    if (!confirm(`Delete "${g.name}"${n ? ` and its ${n} match${n === 1 ? "" : "es"}` : ""}? This can't be undone.`)) return;
-    const now = Date.now();
-    state.deleted[id] = now;
-    state.matches.filter((m) => m.gameId === id).forEach((m) => { state.deleted[m.id] = now; });
-    state.games = state.games.filter((x) => x.id !== id);
-    state.matches = state.matches.filter((m) => m.gameId !== id);
-    selectedGameId = state.games[0]?.id ?? null;
-    save(); render();
   }
 
   function refreshPlayerDatalist() {
