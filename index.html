@@ -949,6 +949,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   const normalizeState = (d) => {
     d.updatedAt = d.updatedAt || 0;
     d.deleted = d.deleted || {}; // tombstones: { entityId: deletedAtMs }
+    d.redirects = d.redirects || {}; // deduped game ids: { loserId: survivorId }
     d.templates = d.templates || {};
     d.games.forEach((g) => { g.updatedAt = g.updatedAt || d.updatedAt; });
     d.matches.forEach((m) => { m.updatedAt = m.updatedAt || m.createdAt || d.updatedAt; });
@@ -1003,6 +1004,39 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     });
     if (added) localStorage.setItem(STORE_KEY, JSON.stringify(state));
   };
+
+  // Games are unique by name. If two devices seeded the same game before their
+  // first sync, the merge keeps both copies — heal that here: keep one survivor
+  // (smallest id, so every device independently picks the SAME one), move the
+  // duplicate's matches onto it, and tombstone the duplicate for good.
+  function dedupeGames() {
+    const nameKey = (g) => String(g.name).trim().toLowerCase();
+    const keepByName = new Map();
+    [...state.games].sort((a, b) => (a.id < b.id ? -1 : 1)).forEach((g) => {
+      if (!keepByName.has(nameKey(g))) keepByName.set(nameKey(g), g);
+    });
+    let changed = false;
+    state.games.forEach((g) => {
+      const keep = keepByName.get(nameKey(g));
+      if (keep === g) return;
+      state.redirects[g.id] = keep.id; // synced, so late-arriving matches remap too
+      state.deleted[g.id] = Date.now();
+      changed = true;
+    });
+    if (changed) state.games = state.games.filter((g) => keepByName.get(nameKey(g)) === g);
+    // repair matches pointing at deduped games — including ones that arrive
+    // from a stale device long after the dedupe happened (follow chains)
+    state.matches.forEach((m) => {
+      let target = m.gameId, hops = 0;
+      while (state.redirects[target] && hops < 10) { target = state.redirects[target]; hops++; }
+      if (target !== m.gameId) { m.gameId = target; m.updatedAt = Date.now(); changed = true; }
+    });
+    if (changed) {
+      if (!gameById(selectedGameId)) selectedGameId = state.games[0]?.id ?? null;
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
+    return changed;
+  }
 
   // ---------- helpers ----------
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -2014,6 +2048,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       matches: mergeList(a.matches, b.matches),
       templates: { ...(a.templates || {}), ...(b.templates || {}) },
       deleted,
+      redirects: { ...(a.redirects || {}), ...(b.redirects || {}) },
       updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
     };
   }
@@ -2047,6 +2082,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
           render();
         }
       }
+      if (dedupeGames()) render(); // a merge can surface same-name duplicates
       if (JSON.stringify(state) !== remoteJson) {
         await api("/gists/" + sync.gistId, {
           method: "PATCH",
@@ -2142,6 +2178,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   // and automatically every 5 minutes
   setInterval(() => { if (sync) syncNow(); }, 5 * 60 * 1000);
 
+  dedupeGames();
   ensureTemplates();
   render();
   if (sync) syncNow(); else setSyncStatus("off");
